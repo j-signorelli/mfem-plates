@@ -122,7 +122,7 @@ int main(int argc, char *argv[])
    k.Finalize();
    std::unique_ptr<HypreParMatrix> K_mat(k.ParallelAssemble());
 
-   // Assemble the RHSs
+   // Assemble the RHS
    Vector F_vec(fespace.GetTrueVSize());
    f.Assemble();
    f.ParallelAssemble(F_vec);
