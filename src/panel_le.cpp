@@ -95,7 +95,7 @@ int main(int argc, char *argv[])
 
    // Create a coefficient representing the uniform pressure BC
    VectorArrayCoefficient p_load(dim);
-   p_load.Set(2, new ConstantCoefficient(ctx.delta_p_uniform)); // set z-th component
+   p_load.Set(2, new ConstantCoefficient(-ctx.delta_p_uniform)); // set z-th component
 
    // Convert E and nu to Lame's first and second parameters, as coefficients
    ConstantCoefficient lambda(GetLambda(ctx.E, ctx.nu));
@@ -110,7 +110,7 @@ int main(int argc, char *argv[])
    Array<int> top_bdr_marker(pmesh.bdr_attributes.Size());
    top_bdr_marker = 0;
    top_bdr_marker[5] = 1;
-   f.AddBoundaryIntegrator(new VectorBoundaryLFIntegrator(-p_load), top_bdr_marker);
+   f.AddBoundaryIntegrator(new VectorBoundaryLFIntegrator(p_load), top_bdr_marker);
 
    // Initialize the solution
    ParGridFunction U_gf(&fespace);
