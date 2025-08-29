@@ -1,5 +1,9 @@
+/**
+ * This miniapp solves the linear elasticity equations for a thin
+ * panel having clamped (homogeneous DBC) boundary conditions.
+ */
+
 #include <mfem.hpp>
-#include "common.hpp"
 
 using namespace mfem;
 using namespace std;
@@ -98,8 +102,10 @@ int main(int argc, char *argv[])
    p_load.Set(2, new ConstantCoefficient(-ctx.delta_p_uniform)); // set z-th component
 
    // Convert E and nu to Lame's first and second parameters, as coefficients
-   ConstantCoefficient lambda(GetLambda(ctx.E, ctx.nu));
-   ConstantCoefficient mu(GetMu(ctx.E, ctx.nu));
+   double lambda_val = ctx.E*ctx.nu/((1+ctx.nu)*(1-2*ctx.nu));
+   double mu_val = (3.0/2.0)*(ctx.E/(2*(1-2*ctx.nu)) - lambda_val);
+   ConstantCoefficient lambda(lambda_val);
+   ConstantCoefficient mu(mu_val);
 
    // Initialize the bilinear form representing the LHS (stiffness matrix K in Ku=f)
    ParBilinearForm k(&fespace);
