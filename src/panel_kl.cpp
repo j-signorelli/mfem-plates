@@ -38,7 +38,7 @@ private:
    Coefficient &D;
 
    static const Vector factors_2D({1.0, 2.0, 1.0});
-   mutable DenseMatrix hessian;
+   mutable DenseMatrix hessian, ;
 
 public:
    BiharmonicIntegrator(Coefficient &D_) : D(D_) {};
@@ -49,8 +49,7 @@ public:
       int dim = el.GetDim();
 
       MFEM_ASSERT(dim == 2, "Dimension must be 2.");
-      MFEM_ASSERT(Trans.Hessian().FNorm2() < 1e-20, "Non-affine mesh elements are not currently supported.");
-
+      
       double c, w;
 
       hessian.SetSize(dof, dim * (dim + 1) / 2);
@@ -64,10 +63,11 @@ public:
       {
          const mfem::IntegrationPoint &ip = ir->IntPoint(i);
 
-         el.CalcHessian(ip, hessian); // We might be able to just use CalcPhysHessian...?
+         el.CalcPhysHessian(ip, hessian);
+         // TODO: Fix below so that elmat is only added to properly...
          Trans.SetIntPoint(&ip);
-         AddMultADAt(hessian, factors_2D, elmat);
          elmat *= D.Eval(Trans, ip) * ip.weight * Trans.Weight(); // D * w_IP * det(J)
+         AddMultADAt(hessian, factors_2D, elmat);
       }
    }
 };
