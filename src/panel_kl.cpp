@@ -1,9 +1,9 @@
 /**
  * This miniapp solves the Kirchoff-Love plate equation for clamped
  * boundary conditions using the C0 interior penalty method outlined in:
- * 
- * Brenner, Susanne & Sung, Li-yeng. (2005). C0 Interior Penalty Methods 
- * for Fourth Order Elliptic Boundary Value Problems on Polygonal Domains. 
+ *
+ * Brenner, Susanne & Sung, Li-yeng. (2005). C0 Interior Penalty Methods
+ * for Fourth Order Elliptic Boundary Value Problems on Polygonal Domains.
  * Journal of Scientific Computing. 22-23. 83-118. 10.1007/s10915-004-4135-7.
  */
 
@@ -16,60 +16,58 @@ struct KL_Context
 {
    double Lx = 1.0;
    double Ly = 1.0;
-   double t   = 0.1;
+   double t = 0.1;
 
-   int Nx  = 10;
-   int Ny  = 10;
+   int Nx = 10;
+   int Ny = 10;
 
-   int rs    = 0;
+   int rs = 0;
    int order = 2;
 
    // Material properties for 17-4PH stainless steel
-   double E  = 196.5e9;
+   double E = 196.5e9;
    double nu = 0.27;
 
    double delta_p_uniform = 1e3;
 
 } ctx;
 
-
 class BiharmonicIntegrator : public BilinearFormIntegrator
 {
 private:
    Coefficient &D;
-   
-   mutable DenseMatrix d2shape;
+
+   static const Vector factors_2D({1.0, 2.0, 1.0});
+   mutable DenseMatrix hessian;
+
 public:
-   BiharmonicIntegrator(Coefficient &D_) : D(D_) {}
+   BiharmonicIntegrator(Coefficient &D_) : D(D_) {};
 
    void AssembleElementMatrix(const FiniteElement &el, ElementTransformation &Trans, DenseMatrix &elmat) override
    {
       int dof = el.GetDof();
       int dim = el.GetDim();
+
+      MFEM_ASSERT(dim == 2, "Dimension must be 2.");
+      MFEM_ASSERT(Trans.Hessian().FNorm2() < 1e-20, "Non-affine mesh elements are not currently supported.");
+
       double c, w;
 
-      d2shape.SetSize(dof, dim);
+      hessian.SetSize(dof, dim * (dim + 1) / 2);
+      hessian_factor.SetSize(dof, dim * (dim + 1) / 2);
       elmat.SetSize(dof, dof);
+      elmat = 0.0;
 
       const IntegrationRule *ir = GetIntegrationRule(el, Trans);
-      elmat = 0.0;
 
       for (int i = 0; i < ir->GetNPoints(); i++)
       {
          const mfem::IntegrationPoint &ip = ir->IntPoint(i);
-      
-         el.CalcHessian(ip, d2shape); // D^2\phi
-      
+
+         el.CalcHessian(ip, hessian); // We might be able to just use CalcPhysHessian...?
          Trans.SetIntPoint(&ip);
-         w = D.Eval(Trans, ip)*ip.weight*Trans.Weight(); // D * w_IP * |J_\tau|
-
-         c = fcoeff.Eval(Tr,ip);
-         w = c*ip.weight*Tr.Weight();
-         mfem::Mult(dshape, Tr.InverseJacobian(), gshape);
-         gshape.GradToDiv(pelvect);
-
-         pelvect *= w;
-         elvect += pelvect;
+         AddMultADAt(hessian, factors_2D, elmat);
+         elmat *= D.Eval(Trans, ip) * ip.weight * Trans.Weight(); // D * w_IP * det(J)
       }
    }
 };
@@ -82,7 +80,6 @@ public:
 
    void AssembleFaceMatrix(const FiniteElement &el1, const FiniteElement &el2, FaceElementTransformations &Trans, DenseMatrix &elmat) override
    {
-
    }
 };
 
@@ -94,10 +91,8 @@ public:
 
    void AssembleFaceMatrix(const FiniteElement &el1, const FiniteElement &el2, FaceElementTransformations &Trans, DenseMatrix &elmat) override
    {
-
    }
 };
-
 
 int main(int argc, char *argv[])
 {
@@ -121,7 +116,7 @@ int main(int argc, char *argv[])
 
    args.AddOption(&ctx.E, "-E", "--youngs-modulus", "Young's modulus of the panel.");
    args.AddOption(&ctx.nu, "-nu", "--poisson-ratio", "Poisson ratio of the panel.");
-   
+
    args.AddOption(&ctx.delta_p_uniform, "-dp", "--delta-p", "Uniform pressure difference imposed onto panel.");
 
    args.Parse();
@@ -165,8 +160,8 @@ int main(int argc, char *argv[])
    ConstantCoefficient p_load(-ctx.delta_p_uniform);
 
    // Compute bending stiffness D using E, nu, and t, as coefficient
-   double D_val = 
-   ConstantCoefficient D(lambda_val);
+   double D_val =
+       ConstantCoefficient D(lambda_val);
 
    // Initialize the bilinear form representing the LHS (stiffness matrix K in Ku=f)
    ParBilinearForm k(&fespace);
