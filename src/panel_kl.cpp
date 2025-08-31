@@ -38,8 +38,8 @@ private:
    Coefficient &D;
 
    static const Vector factors_2D({1.0, 2.0, 1.0});
-   mutable DenseMatrix hessian, ;
-
+   mutable DenseMatrix hessian;
+   mutable Vector factors;
 public:
    BiharmonicIntegrator(Coefficient &D_) : D(D_) {};
 
@@ -49,12 +49,13 @@ public:
       int dim = el.GetDim();
 
       MFEM_ASSERT(dim == 2, "Dimension must be 2.");
-      
+
       double c, w;
 
       hessian.SetSize(dof, dim * (dim + 1) / 2);
-      hessian_factor.SetSize(dof, dim * (dim + 1) / 2);
-      elmat.SetSize(dof, dof);
+      elmat.SetSize(dof);
+      factors.SetSize(dim * (dim + 1) / 2);
+
       elmat = 0.0;
 
       const IntegrationRule *ir = GetIntegrationRule(el, Trans);
@@ -62,12 +63,14 @@ public:
       for (int i = 0; i < ir->GetNPoints(); i++)
       {
          const mfem::IntegrationPoint &ip = ir->IntPoint(i);
-
-         el.CalcPhysHessian(ip, hessian);
-         // TODO: Fix below so that elmat is only added to properly...
          Trans.SetIntPoint(&ip);
-         elmat *= D.Eval(Trans, ip) * ip.weight * Trans.Weight(); // D * w_IP * det(J)
-         AddMultADAt(hessian, factors_2D, elmat);
+
+         el.CalcPhysHessian(Trans, hessian);
+         
+         factors = factors_2D;
+         factors *= D.Eval(Trans, ip) * ip.weight * Trans.Weight();
+
+         AddMultADAt(hessian, factors, elmat);
       }
    }
 };
@@ -80,6 +83,7 @@ public:
 
    void AssembleFaceMatrix(const FiniteElement &el1, const FiniteElement &el2, FaceElementTransformations &Trans, DenseMatrix &elmat) override
    {
+
    }
 };
 
