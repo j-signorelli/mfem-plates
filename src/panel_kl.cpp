@@ -18,8 +18,8 @@ struct KL_Context
    double Ly = 1.0;
    double t = 0.1;
 
-   int Nx = 10;
-   int Ny = 10;
+   int Nx = 2;//10;
+   int Ny = 2;//10;
 
    int rs = 0;
    int order = 2;
@@ -37,28 +37,33 @@ class BiharmonicIntegrator : public BilinearFormIntegrator
 private:
    Coefficient &D;
 
-   static const Vector factors_2D({1.0, 2.0, 1.0});
+   inline static const Vector factors_2D{1.0, 2.0, 1.0};
    mutable DenseMatrix hessian;
    mutable Vector factors;
 public:
-   BiharmonicIntegrator(Coefficient &D_) : D(D_) {};
+   BiharmonicIntegrator(Coefficient &D_) : D(D_) {}
 
    void AssembleElementMatrix(const FiniteElement &el, ElementTransformation &Trans, DenseMatrix &elmat) override
    {
-      int dof = el.GetDof();
+      int ndof = el.GetDof();
       int dim = el.GetDim();
 
       MFEM_ASSERT(dim == 2, "Dimension must be 2.");
 
       double c, w;
 
-      hessian.SetSize(dof, dim * (dim + 1) / 2);
-      elmat.SetSize(dof);
+      hessian.SetSize(ndof, dim * (dim + 1) / 2);
+      elmat.SetSize(ndof);
       factors.SetSize(dim * (dim + 1) / 2);
 
       elmat = 0.0;
 
       const IntegrationRule *ir = GetIntegrationRule(el, Trans);
+      if (ir == NULL)
+      {
+         int order = 2 * Trans.OrderGrad(&el); // correct order?
+         ir = &mfem::IntRules.Get(el.GetGeomType(), order);
+      }
 
       for (int i = 0; i < ir->GetNPoints(); i++)
       {
@@ -75,26 +80,23 @@ public:
    }
 };
 
-class ConsistencyIntegrator : public BilinearFormIntegrator
+class C0InteriorPenaltyIntegrator : public BilinearFormIntegrator
 {
-
+   const double eta;
 public:
-   ConsistencyIntegrator();
+   C0InteriorPenaltyIntegrator(double eta_) : eta(eta_) {};
 
    void AssembleFaceMatrix(const FiniteElement &el1, const FiniteElement &el2, FaceElementTransformations &Trans, DenseMatrix &elmat) override
    {
+      // Because we are in H1, ndofs for el1 and el2 face will be the same
+      int ndof1 = el1.GetDof();
+      int ndof2 = el2.GetDof();
 
-   }
-};
+      cout << "Num dofs on face el1: " << ndof1 << endl;
+      cout << "Num dofs on face el2: " << ndof2 << endl;
 
-class PenaltyIntegrator : public BilinearFormIntegrator
-{
-
-public:
-   PenaltyIntegrator();
-
-   void AssembleFaceMatrix(const FiniteElement &el1, const FiniteElement &el2, FaceElementTransformations &Trans, DenseMatrix &elmat) override
-   {
+      elmat.SetSize(ndof1 + ndof2);
+      elmat = 0.0;
    }
 };
 
@@ -164,14 +166,13 @@ int main(int argc, char *argv[])
    ConstantCoefficient p_load(-ctx.delta_p_uniform);
 
    // Compute bending stiffness D using E, nu, and t, as coefficient
-   double D_val =
-       ConstantCoefficient D(lambda_val);
+   double D_val = 2*pow(ctx.t,3)*ctx.E/(3*(1-ctx.nu));
+   ConstantCoefficient D(D_val);
 
    // Initialize the bilinear form representing the LHS (stiffness matrix K in Ku=f)
    ParBilinearForm k(&fespace);
-   k.AddDomainIntegrator(new BiharmonicIntegrator());
-   k.AddInteriorFaceIntegrator(new ConsistencyIntegrator());
-   k.AddInteriorFaceIntegrator(new PenaltyIntegrator());
+   k.AddDomainIntegrator(new BiharmonicIntegrator(D));
+   k.AddInteriorFaceIntegrator(new C0InteriorPenaltyIntegrator(0.9));
 
    // Initialize the linear form representing the LHS (forcing term f in Ku=f)
    ParLinearForm f(&fespace);
