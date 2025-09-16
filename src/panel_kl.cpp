@@ -28,7 +28,7 @@ struct KL_Context
    double E = 196.5e9;
    double nu = 0.27;
 
-   double delta_p_uniform = 1e3;
+   double delta_p_uniform = 1e6;
 
 } ctx;
 
@@ -177,7 +177,13 @@ public:
 
 
       // Compute edge length
-      double h_e = 0.0;
+      double h_e  = 0.0;
+      for (int p = 0; p < ir->GetNPoints(); p++)
+      {
+         const IntegrationPoint &ip = ir->IntPoint(p);
+         Trans.SetAllIntPoints(&ip);
+         h_e += ip.weight * Trans.Face->Weight();
+      }
 
       for (int p = 0; p < ir->GetNPoints(); p++)
       {
@@ -299,8 +305,8 @@ int main(int argc, char *argv[])
    // Initialize the bilinear form representing the LHS (stiffness matrix K in Ku=f)
    ParBilinearForm k(&fespace);
    k.AddDomainIntegrator(new BiharmonicIntegrator(D));
-   k.AddInteriorFaceIntegrator(new C0InteriorPenaltyIntegrator(0.9));
-   k.AddBdrFaceIntegrator(new C0InteriorPenaltyIntegrator(0.9));
+   k.AddInteriorFaceIntegrator(new C0InteriorPenaltyIntegrator(10000));
+   k.AddBdrFaceIntegrator(new C0InteriorPenaltyIntegrator(10000));
 
    // Initialize the linear form representing the LHS (forcing term f in Ku=f)
    ParLinearForm f(&fespace);
@@ -342,6 +348,7 @@ int main(int argc, char *argv[])
 
    // // Write the output
    ParaViewDataCollection pvdc("KirchoffLove", &pmesh);
+   pvdc.SetHighOrderOutput(true);
    pvdc.RegisterField("Deformation", &W_gf);
    pvdc.Save();
 
