@@ -18,8 +18,8 @@ struct KL_Context
    double Ly = 1.0;
    double t = 0.1;
 
-   int Nx = 2;//10;
-   int Ny = 2;//10;
+   int Nx = 10;
+   int Ny = 10;
 
    int rs = 0;
    int order = 2;
@@ -84,34 +84,53 @@ class C0InteriorPenaltyIntegrator : public BilinearFormIntegrator
 {
    const double eta;
 
-   mutable Vector normal_e;
-   mutable Vector dnshape, nd2nshape, nv;
-   mutable DenseMatrix dshape_a, hessian_b, block11, block12, block21, block22;
+   // AssembleBlock Helpers:
+   mutable Vector n_b, dnshape_a, dnshape_b, nd2nshape_b, nv;
+
+   // AssembleFaceMatrix Helpers:
+   mutable Vector normal_1, normal_2;
+   mutable DenseMatrix dshape_1, dshape_2, hessian_1, hessian_2, block11, block12, block21, block22, elmat_p;
 
 public:
    C0InteriorPenaltyIntegrator(double eta_) : eta(eta_) {};
 
-   /** Compute:
-         q^(a,b) = [d\phi^a/dn][d^2\phi^b/dn^2], or
-         q^(a,b) = [(grad \phi^a) dot n_e]*[n_e^T dot hess(\phi)^b dot n_e]
+   /** Compute: q^(a,b) + p^(a,b)
+         
+         q^(a,b) = [d\phi^(a)/dn^(a)][d^2\phi^b/dn^(a)^2], or
+         q^(a,b) = [(grad \phi^a) dot n^(a)]*[n^(b)^T dot hess(\phi)^b dot n^(b)]
+
+         and
+
+         p^(a,b) = [d\phi^(a)/dn^(a)][d\phi^(b)/dn^(b)] or
+                 = [(grad \phi^a) dot n^(a)][(grad \phi^b) dot n^(b)]
    */
-   void AssembleBlock(const DenseMatrix &dshape_a, const DenseMatrix &hessian_b, const Vector &n_e, DenseMatrix &elmat_ab)
-   {
-      dnshape.SetSize(dshape_a.NumRows()); // ndofs_a
-      nd2nshape.SetSize(hessian_b.NumRows()); // ndofs_b
+   void AssembleBlock(const DenseMatrix &dshape_a, const DenseMatrix &dshape_b, const DenseMatrix &hessian_b, const Vector &n_a, const Vector &n_b, double h_e, DenseMatrix &elmat_ab)
+   {  
+      elmat_ab = 0.0;
+
+      dnshape_a.SetSize(dshape_a.NumRows()); // ndofs_a
+      dnshape_b.SetSize(dshape_b.NumRows()); // ndofs_b
+      nd2nshape_b.SetSize(hessian_b.NumRows()); // ndofs_b
       nv.SetSize(hessian_b.NumCols());
 
       // dshape_a = (dof, dim)
-      dshape_a.Mult(n_e, dnshape);
+      dshape_a.Mult(n_a, dnshape_a);
+
+      // dshape_b = (dof, dim)
+      dshape_b.Mult(n_b, dnshape_b);
 
       // hessian_b = (dof, [3 in 2D])
-      nv[0] = pow(n_e[0],2);
-      nv[1] = 2*n_e[0]*n_e[1];
-      nv[2] = n_e[1]*n_e[1];
+      nv[0] = pow(n_b[0],2);
+      nv[1] = 2*n_b[0]*n_b[1];
+      nv[2] = n_b[1]*n_b[1];
 
-      hessian_b.Mult(nv, nd2nshape);
+      hessian_b.Mult(nv, nd2nshape_b);
 
-      AddMult_a_VVt(0.5, dnshape, nd2nshape, elmat_ab);
+      // Consistency term:
+      AddMult_a_VWt(1.0, dnshape_a, nd2nshape_b, elmat_ab);
+
+      // Penalty term (symmetric):
+      AddMult_a_VWt(eta/h_e, dnshape_a, dnshape_b, elmat_ab);
    }
 
    void AssembleFaceMatrix(const FiniteElement &el1, const FiniteElement &el2, FaceElementTransformations &Trans, DenseMatrix &elmat) override
@@ -119,12 +138,10 @@ public:
       // Because we are in H1, ndofs for el1 and el2 face will be the same
       int dim = el1.GetDim();
       int ndof1 = el1.GetDof();
-      
+      int ndof2;
       MFEM_ASSERT(dim == 2, "Dimension must be 2.");
 
-      // ---------------------------------------------------
-      // I think this is important when running in parallel:
-      int ndof2;
+      // For boundary face integration:
       if (Trans.Elem2No >= 0)
       {
          ndof2 = el2.GetDof();
@@ -133,26 +150,34 @@ public:
       {
          ndof2 = 0;
       }
-      // ---------------------------------------------------
 
-      normal_e.SetSize(dim);
-      dshape_a.SetSize()
+      normal_1.SetSize(dim);
+      dshape_1.SetSize(ndof1, dim);
+      hessian_1.SetSize(ndof1, dim * (dim + 1) / 2);
       block11.SetSize(ndof1, ndof1);
       if (ndof2 > 0)
       {
+         dshape_2.SetSize(ndof2, dim);
+         normal_2.SetSize(dim);
+         hessian_2.SetSize(ndof2, dim * (dim + 1) / 2);
          block12.SetSize(ndof1, ndof2);
          block21.SetSize(ndof2, ndof1);
          block22.SetSize(ndof2, ndof2);
       }
       elmat.SetSize(ndof1 + ndof2);
+      elmat_p.SetSize(ndof1 + ndof2);
       elmat = 0.0;
 
-      const IntegrationRule *ir = GetIntegrationRule(el, Trans);
+      const IntegrationRule *ir = IntRule;
       if (ir == NULL)
       {
-         int order = 2*el1.GetOrder();
-         ir = &IntRules.Get(el.GetGeomType(), order);
+         int order = 2 * max(el1.GetOrder(), ndof2 ? el2.GetOrder() : 0);
+         ir = &IntRules.Get(el1.GetGeomType(), order);
       }
+
+
+      // Compute edge length
+      double h_e = 0.0;
 
       for (int p = 0; p < ir->GetNPoints(); p++)
       {
@@ -161,48 +186,43 @@ public:
          // Set the integration point in the face and the neighboring elements
          Trans.SetAllIntPoints(&ip);
 
-         // Compute normal of el1.
-         CalcOrtho(Trans.Loc1.Transf.Jacobian, normal_e);
+         // Compute normals, derivatives, and hessians
+         CalcOrtho(Trans.Face->Jacobian(), normal_1);
+         normal_1 /= normal_1.Norml2();
+         el1.CalcPhysDShape(*Trans.Elem1, dshape_1);
+         el1.CalcPhysHessian(*Trans.Elem1, hessian_1);
+         if (ndof2)
+         {
+            normal_2 = normal_1;
+            normal_2 *= -1.0;
+            el2.CalcPhysDShape(*Trans.Elem2, dshape_2);
+            el2.CalcPhysHessian(*Trans.Elem2, hessian_2);
+         }
 
          // (1,1) block
-         el1.CalcPhysDShape(*Trans.Elem1, dshape_a);
-         el1.CalcPhysHessian(*Trans.Elem1, hessian_b);
-         AssembleBlock(dshape_a, hessian_b, n_e, block11);
-         elmat.AddSubMatrix(0,0,block11);
+         AssembleBlock(dshape_1, dshape_1, hessian_1, normal_1, normal_1, h_e, block11);
+         elmat_p.SetSubMatrix(0, 0, block11);
          if (ndof2 > 0)
          {
             // (1,2) block
-            el1.CalcPhysDShape(*Trans.Elem1, dshape_a);
-            el2.CalcPhysHessian(*Trans.Elem2, hessian_b);
-            AssembleBlock(dshape_a, hessian_b, n_e, block12);
-            elmat.AddSubMatrix(0,ndof1,block12);
+            AssembleBlock(dshape_1, dshape_2, hessian_2, normal_1, normal_2, h_e, block12);
+            elmat_p.SetSubMatrix(0, ndof1, block12);
 
             // (2,1) block
-            el2.CalcPhysDShape(*Trans.Elem2, dshape_a);
-            el1.CalcPhysHessian(*Trans.Elem1, hessian_b);
-            AssembleBlock(dshape_a, hessian_b, n_e, block21);
-            block21 *= -1.0;
-            elmat.AddSubMatrix(ndof1,0,block21);
+            AssembleBlock(dshape_2, dshape_1, hessian_1, normal_2, normal_1, h_e, block21);
+            elmat_p.SetSubMatrix(ndof1, 0, block21);
 
             // (2,2) block
-            el2.CalcPhysDShape(*Trans.Elem2, dshape_a);
-            el2.CalcPhysHessian(*Trans.Elem2, hessian_b);
-            AssembleBlock(dshape_a, hessian_b, n_e, block22);
-            block22 *= -1.0;
-            elmat.AddSubMatrix(ndof1,ndof1,block22);
+            AssembleBlock(dshape_2, dshape_2, hessian_2, normal_2, normal_2, h_e, block22);
+            elmat_p.SetSubMatrix(ndof1, ndof1, block22);
          }
 
-         // Can I just do this below?? This gets both the 1/2 in there and the transpose??
-         // (Maybe this doesn't work in parallel?)
-         // I think since the penalty term is symmetric, we can still include it in Assemble without any impact
-         elmat.Symmetrize();
+         // Apply 1/2 factor and symmetry term
+         elmat_p.Symmetrize();
 
-         // Penalty term
-         double edge_len = /* TODO */;
-         el1.CalcPhysDShape(ip, dshape1);
-         el2.CalcPhysDShape(ip, dshape2);
-         
+         elmat_p *= ip.weight * Trans.Face->Weight();
 
+         elmat += elmat_p;
       }
    }
 };
@@ -280,6 +300,7 @@ int main(int argc, char *argv[])
    ParBilinearForm k(&fespace);
    k.AddDomainIntegrator(new BiharmonicIntegrator(D));
    k.AddInteriorFaceIntegrator(new C0InteriorPenaltyIntegrator(0.9));
+   k.AddBdrFaceIntegrator(new C0InteriorPenaltyIntegrator(0.9));
 
    // Initialize the linear form representing the LHS (forcing term f in Ku=f)
    ParLinearForm f(&fespace);
@@ -304,25 +325,25 @@ int main(int argc, char *argv[])
    std::unique_ptr<HypreParMatrix> K_e(K_mat->EliminateRowsCols(ess_tdof_list));
    K_mat->EliminateBC(*K_e, ess_tdof_list, W_gf.GetTrueVector(), F_vec);
 
-   // // Initialize preconditioner
-   // HypreBoomerAMG amg(*K_mat);
-   // amg.SetElasticityOptions(&fespace);
+   // Initialize preconditioner
+   HypreBoomerAMG amg(*K_mat);
 
-   // // Initialize solver
-   // HyprePCG pcg(*K_mat);
-   // pcg.SetTol(1e-8);
-   // pcg.SetMaxIter(1000);
-   // pcg.SetPrintLevel(2);
-   // pcg.SetPreconditioner(amg);
+   // Initialize solver
+   HyprePCG pcg(*K_mat);
+   pcg.SetTol(1e-8);
+   pcg.SetMaxIter(1000);
+   pcg.SetPrintLevel(2);
+   pcg.SetPreconditioner(amg);
+   
+   // Solve Ku=f
+   pcg.Mult(F_vec, W_gf.GetTrueVector());
+   W_gf.SetFromTrueVector();
 
-   // // Solve Ku=f
-   // pcg.Mult(F_vec, W_gf.GetTrueVector());
-   // U_gf.SetFromTrueVector();
 
    // // Write the output
-   // ParaViewDataCollection pvdc("KirchoffLove", &pmesh);
-   // pvdc.RegisterField("Deformation", &W_gf);
-   // pvdc.Save();
+   ParaViewDataCollection pvdc("KirchoffLove", &pmesh);
+   pvdc.RegisterField("Deformation", &W_gf);
+   pvdc.Save();
 
    return 0;
 }
