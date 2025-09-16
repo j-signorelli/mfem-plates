@@ -120,6 +120,8 @@ public:
       int dim = el1.GetDim();
       int ndof1 = el1.GetDof();
       
+      MFEM_ASSERT(dim == 2, "Dimension must be 2.");
+
       // ---------------------------------------------------
       // I think this is important when running in parallel:
       int ndof2;
@@ -164,28 +166,38 @@ public:
 
          // (1,1) block
          el1.CalcPhysDShape(*Trans.Elem1, dshape_a);
-         el1.CalcHessian(ip, hessian_b);
-         AssembleBlock(, block11);
+         el1.CalcPhysHessian(*Trans.Elem1, hessian_b);
+         AssembleBlock(dshape_a, hessian_b, n_e, block11);
          elmat.AddSubMatrix(0,0,block11);
          if (ndof2 > 0)
          {
             // (1,2) block
-            AssembleBlock(, block12);
+            el1.CalcPhysDShape(*Trans.Elem1, dshape_a);
+            el2.CalcPhysHessian(*Trans.Elem2, hessian_b);
+            AssembleBlock(dshape_a, hessian_b, n_e, block12);
             elmat.AddSubMatrix(0,ndof1,block12);
 
             // (2,1) block
-            AssembleBlock(, block21);
+            el2.CalcPhysDShape(*Trans.Elem2, dshape_a);
+            el1.CalcPhysHessian(*Trans.Elem1, hessian_b);
+            AssembleBlock(dshape_a, hessian_b, n_e, block21);
+            block21 *= -1.0;
             elmat.AddSubMatrix(ndof1,0,block21);
 
             // (2,2) block
-            AssembleBlock(, block22);
+            el2.CalcPhysDShape(*Trans.Elem2, dshape_a);
+            el2.CalcPhysHessian(*Trans.Elem2, hessian_b);
+            AssembleBlock(dshape_a, hessian_b, n_e, block22);
+            block22 *= -1.0;
             elmat.AddSubMatrix(ndof1,ndof1,block22);
          }
 
-         // TODO: elmat += elmat^T
+         // Can I just do this below?? This gets both the 1/2 in there and the transpose??
+         // (Maybe this doesn't work in parallel?)
+         // I think since the penalty term is symmetric, we can still include it in Assemble without any impact
+         elmat.Symmetrize();
 
-
-         // Penalty term:
+         // Penalty term
          double edge_len = /* TODO */;
          el1.CalcPhysDShape(ip, dshape1);
          el2.CalcPhysDShape(ip, dshape2);
