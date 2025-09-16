@@ -61,8 +61,8 @@ public:
       const IntegrationRule *ir = GetIntegrationRule(el, Trans);
       if (ir == NULL)
       {
-         int order = 2 * Trans.OrderGrad(&el); // correct order?
-         ir = &mfem::IntRules.Get(el.GetGeomType(), order);
+         int order = 2*el.GetOrder() + Trans.OrderW();
+         ir = &IntRules.Get(el.GetGeomType(), order);
       }
 
       for (int i = 0; i < ir->GetNPoints(); i++)
@@ -83,20 +83,115 @@ public:
 class C0InteriorPenaltyIntegrator : public BilinearFormIntegrator
 {
    const double eta;
+
+   mutable Vector normal_e;
+   mutable Vector dnshape, nd2nshape, nv;
+   mutable DenseMatrix dshape_a, hessian_b, block11, block12, block21, block22;
+
 public:
    C0InteriorPenaltyIntegrator(double eta_) : eta(eta_) {};
+
+   /** Compute:
+         q^(a,b) = [d\phi^a/dn][d^2\phi^b/dn^2], or
+         q^(a,b) = [(grad \phi^a) dot n_e]*[n_e^T dot hess(\phi)^b dot n_e]
+   */
+   void AssembleBlock(const DenseMatrix &dshape_a, const DenseMatrix &hessian_b, const Vector &n_e, DenseMatrix &elmat_ab)
+   {
+      dnshape.SetSize(dshape_a.NumRows()); // ndofs_a
+      nd2nshape.SetSize(hessian_b.NumRows()); // ndofs_b
+      nv.SetSize(hessian_b.NumCols());
+
+      // dshape_a = (dof, dim)
+      dshape_a.Mult(n_e, dnshape);
+
+      // hessian_b = (dof, [3 in 2D])
+      nv[0] = pow(n_e[0],2);
+      nv[1] = 2*n_e[0]*n_e[1];
+      nv[2] = n_e[1]*n_e[1];
+
+      hessian_b.Mult(nv, nd2nshape);
+
+      AddMult_a_VVt(0.5, dnshape, nd2nshape, elmat_ab);
+   }
 
    void AssembleFaceMatrix(const FiniteElement &el1, const FiniteElement &el2, FaceElementTransformations &Trans, DenseMatrix &elmat) override
    {
       // Because we are in H1, ndofs for el1 and el2 face will be the same
+      int dim = el1.GetDim();
       int ndof1 = el1.GetDof();
-      int ndof2 = el2.GetDof();
+      
+      // ---------------------------------------------------
+      // I think this is important when running in parallel:
+      int ndof2;
+      if (Trans.Elem2No >= 0)
+      {
+         ndof2 = el2.GetDof();
+      }
+      else
+      {
+         ndof2 = 0;
+      }
+      // ---------------------------------------------------
 
-      cout << "Num dofs on face el1: " << ndof1 << endl;
-      cout << "Num dofs on face el2: " << ndof2 << endl;
-
+      normal_e.SetSize(dim);
+      dshape_a.SetSize()
+      block11.SetSize(ndof1, ndof1);
+      if (ndof2 > 0)
+      {
+         block12.SetSize(ndof1, ndof2);
+         block21.SetSize(ndof2, ndof1);
+         block22.SetSize(ndof2, ndof2);
+      }
       elmat.SetSize(ndof1 + ndof2);
       elmat = 0.0;
+
+      const IntegrationRule *ir = GetIntegrationRule(el, Trans);
+      if (ir == NULL)
+      {
+         int order = 2*el1.GetOrder();
+         ir = &IntRules.Get(el.GetGeomType(), order);
+      }
+
+      for (int p = 0; p < ir->GetNPoints(); p++)
+      {
+         const IntegrationPoint &ip = ir->IntPoint(p);
+
+         // Set the integration point in the face and the neighboring elements
+         Trans.SetAllIntPoints(&ip);
+
+         // Compute normal of el1.
+         CalcOrtho(Trans.Loc1.Transf.Jacobian, normal_e);
+
+         // (1,1) block
+         el1.CalcPhysDShape(*Trans.Elem1, dshape_a);
+         el1.CalcHessian(ip, hessian_b);
+         AssembleBlock(, block11);
+         elmat.AddSubMatrix(0,0,block11);
+         if (ndof2 > 0)
+         {
+            // (1,2) block
+            AssembleBlock(, block12);
+            elmat.AddSubMatrix(0,ndof1,block12);
+
+            // (2,1) block
+            AssembleBlock(, block21);
+            elmat.AddSubMatrix(ndof1,0,block21);
+
+            // (2,2) block
+            AssembleBlock(, block22);
+            elmat.AddSubMatrix(ndof1,ndof1,block22);
+         }
+
+         // TODO: elmat += elmat^T
+
+
+         // Penalty term:
+         double edge_len = /* TODO */;
+         el1.CalcPhysDShape(ip, dshape1);
+         el2.CalcPhysDShape(ip, dshape2);
+         
+
+      }
    }
 };
 
