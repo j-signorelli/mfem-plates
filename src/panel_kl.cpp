@@ -68,6 +68,28 @@ public:
    void AssembleFaceMatrix(const FiniteElement &el1, const FiniteElement &el2, FaceElementTransformations &Trans, DenseMatrix &elmat) override;
 };
 
+double dp_test(const Vector &x)
+{
+   return -100*(24*pow(x[0],4)
+         - 48*pow(x[0],3)
+         + 72*pow(x[0],2)
+         - 48*x[0]
+         + 24*pow(x[1],4)
+         - 48*pow(x[1],3)
+         + 72*pow(x[1],2)
+         - 48*x[1]
+         + 288*pow(x[0],2)*pow(x[1],2)
+         - 288*x[0]*pow(x[1],2)
+         - 288*pow(x[0],2)*x[1]
+         + 288*x[0]*x[1]
+         + 8);
+}
+
+double w_exact(const Vector &x)
+{
+   return -100*pow(x[0]*(1-x[0]),2)*pow(x[1]*(1-x[1]),2);
+}
+
 int main(int argc, char *argv[])
 {
    // Initialize MPI and HYPRE.
@@ -135,10 +157,11 @@ int main(int argc, char *argv[])
    // ess_tdof_list now holds indices of the DOFs associated with the panel sides
 
    // Create a coefficient representing the uniform pressure BC
-   ConstantCoefficient p_load(-ctx.delta_p_uniform);
+   //ConstantCoefficient p_load(-ctx.delta_p_uniform);
+   FunctionCoefficient p_load(dp_test);
 
    // Compute bending stiffness D using E, nu, and t, as coefficient
-   double D_val = 2*pow(ctx.t,3)*ctx.E/(3*(1-ctx.nu));
+   double D_val = 1.0;//2*pow(ctx.t,3)*ctx.E/(3*(1-ctx.nu));
    ConstantCoefficient D(D_val);
 
    // Initialize the bilinear form representing the LHS (stiffness matrix K in Ku=f)
@@ -172,12 +195,8 @@ int main(int argc, char *argv[])
 
    // Initialize preconditioner
    HypreBoomerAMG amg(*K_mat);
-   amg.SetCycleType(1);
 
    // Initialize solver
-   //CGSolver pcg(MPI_COMM_WORLD);
-   //pcg.SetOperator(*K_mat);
-   //pcg.SetRelTol(1e-8);
    HyprePCG pcg(*K_mat);
    pcg.SetTol(1e-8);
    pcg.SetMaxIter(100000);
@@ -192,7 +211,18 @@ int main(int argc, char *argv[])
    ParaViewDataCollection pvdc("KirchoffLove", &pmesh);
    pvdc.SetHighOrderOutput(true);
    pvdc.RegisterField("Deformation", &W_gf);
+
+   ParGridFunction exact_gf(&fespace);
+   FunctionCoefficient exact_coeff(w_exact);
+   exact_gf.ProjectCoefficient(exact_coeff);
+   pvdc.RegisterField("Exact", &exact_gf);
    pvdc.Save();
+
+   double err = W_gf.ComputeL2Error(exact_coeff);
+   if (rank == 0)
+   {
+      cout << "L2 Error: " << err << endl;
+   }
 
    return 0;
 }
