@@ -200,10 +200,6 @@ public:
             el2.CalcPhysDShape(*Trans.Elem2, dshape_2);
             el2.CalcPhysHessian(*Trans.Elem2, hessian_2);
          }
-         else
-         {
-            normal_1 *= -1.0;
-         }
 
          // (1,1) block
          AssembleBlock(dshape_1, dshape_1, hessian_1, normal_1, normal_1, h_e, block11);
@@ -305,8 +301,8 @@ int main(int argc, char *argv[])
    // Initialize the bilinear form representing the LHS (stiffness matrix K in Ku=f)
    ParBilinearForm k(&fespace);
    k.AddDomainIntegrator(new BiharmonicIntegrator(D));
-   k.AddInteriorFaceIntegrator(new C0InteriorPenaltyIntegrator(1e5));
-   k.AddBdrFaceIntegrator(new C0InteriorPenaltyIntegrator(1e5));
+   k.AddInteriorFaceIntegrator(new C0InteriorPenaltyIntegrator(5e5));
+   k.AddBdrFaceIntegrator(new C0InteriorPenaltyIntegrator(5e5));
 
    // Initialize the linear form representing the LHS (forcing term f in Ku=f)
    ParLinearForm f(&fespace);
@@ -337,7 +333,7 @@ int main(int argc, char *argv[])
    // Initialize solver
    HyprePCG pcg(*K_mat);
    pcg.SetTol(1e-8);
-   pcg.SetMaxIter(10000);
+   pcg.SetMaxIter(100000);
    pcg.SetPrintLevel(2);
    pcg.SetPreconditioner(amg);
    
