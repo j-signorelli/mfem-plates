@@ -25,10 +25,10 @@ struct KL_Context
    int order = 2;
 
    // Material properties for 17-4PH stainless steel
-   double E = 196.5e9;
+   double E = 1.0;//196.5e9;
    double nu = 0.27;
 
-   double delta_p_uniform = 1e6;
+   double delta_p_uniform = 0.1;//1e6;
 
 } ctx;
 
@@ -138,17 +138,13 @@ public:
       // Because we are in H1, ndofs for el1 and el2 face will be the same
       int dim = el1.GetDim();
       int ndof1 = el1.GetDof();
-      int ndof2;
+      int ndof2 = 0;
       MFEM_ASSERT(dim == 2, "Dimension must be 2.");
 
       // For boundary face integration:
       if (Trans.Elem2No >= 0)
       {
          ndof2 = el2.GetDof();
-      }
-      else
-      {
-         ndof2 = 0;
       }
 
       normal_1.SetSize(dim);
@@ -203,6 +199,10 @@ public:
             normal_2 *= -1.0;
             el2.CalcPhysDShape(*Trans.Elem2, dshape_2);
             el2.CalcPhysHessian(*Trans.Elem2, hessian_2);
+         }
+         else
+         {
+            normal_1 *= -1.0;
          }
 
          // (1,1) block
@@ -305,8 +305,8 @@ int main(int argc, char *argv[])
    // Initialize the bilinear form representing the LHS (stiffness matrix K in Ku=f)
    ParBilinearForm k(&fespace);
    k.AddDomainIntegrator(new BiharmonicIntegrator(D));
-   k.AddInteriorFaceIntegrator(new C0InteriorPenaltyIntegrator(10000));
-   k.AddBdrFaceIntegrator(new C0InteriorPenaltyIntegrator(10000));
+   k.AddInteriorFaceIntegrator(new C0InteriorPenaltyIntegrator(1e5));
+   k.AddBdrFaceIntegrator(new C0InteriorPenaltyIntegrator(1e5));
 
    // Initialize the linear form representing the LHS (forcing term f in Ku=f)
    ParLinearForm f(&fespace);
@@ -337,7 +337,7 @@ int main(int argc, char *argv[])
    // Initialize solver
    HyprePCG pcg(*K_mat);
    pcg.SetTol(1e-8);
-   pcg.SetMaxIter(1000);
+   pcg.SetMaxIter(10000);
    pcg.SetPrintLevel(2);
    pcg.SetPreconditioner(amg);
    
