@@ -71,6 +71,7 @@ int main(int argc, char *argv[])
 
    // Generate panel mesh
    Mesh m = Mesh::MakeCartesian3D(ctx.Nx, ctx.Ny, ctx.Nz, Element::Type::HEXAHEDRON, ctx.Lx, ctx.Ly, ctx.t);
+   m.SetCurvature(ctx.order); // ensure isoparametric!
    int dim = m.Dimension();
 
    // Refine the mesh

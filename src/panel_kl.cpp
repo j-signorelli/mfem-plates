@@ -30,6 +30,9 @@ struct KL_Context
 
    double delta_p_uniform = 0.1;//1e6;
 
+
+   // Penalty coefficient
+   double eta = 1e5;
 } ctx;
 
 class BiharmonicIntegrator : public BilinearFormIntegrator
@@ -90,6 +93,9 @@ int main(int argc, char *argv[])
 
    args.AddOption(&ctx.delta_p_uniform, "-dp", "--delta-p", "Uniform pressure difference imposed onto panel.");
 
+   args.AddOption(&ctx.eta, "-eta", "--penalty-coeff", "Penalty coefficient.");
+
+
    args.Parse();
    if (!args.Good())
    {
@@ -103,8 +109,7 @@ int main(int argc, char *argv[])
 
    // Generate panel mesh
    Mesh m = Mesh::MakeCartesian2D(ctx.Nx, ctx.Ny, Element::Type::QUADRILATERAL, true, ctx.Lx, ctx.Ly);
-   m.SetCurvature(ctx.order); // Ensure Isoparametric!!!
-
+   m.SetCurvature(ctx.order); // ensure isoparametric!
    int dim = m.Dimension();
 
    // Refine the mesh
@@ -115,9 +120,6 @@ int main(int argc, char *argv[])
 
    // Partition the mesh
    ParMesh pmesh(MPI_COMM_WORLD, m);
-
-   ParaViewDataCollection fuck("KirchoffLove", &pmesh);
-   fuck.Save();
 
    // Initialize the FE collection and FiniteElementSpace
    H1_FECollection fe_coll(ctx.order, dim);
@@ -142,8 +144,8 @@ int main(int argc, char *argv[])
    // Initialize the bilinear form representing the LHS (stiffness matrix K in Ku=f)
    ParBilinearForm k(&fespace);
    k.AddDomainIntegrator(new BiharmonicIntegrator(D));
-   k.AddInteriorFaceIntegrator(new C0InteriorPenaltyIntegrator(5e5));
-   k.AddBdrFaceIntegrator(new C0InteriorPenaltyIntegrator(5e5));
+   k.AddInteriorFaceIntegrator(new C0InteriorPenaltyIntegrator(ctx.eta));
+   k.AddBdrFaceIntegrator(new C0InteriorPenaltyIntegrator(ctx.eta));
 
    // Initialize the linear form representing the LHS (forcing term f in Ku=f)
    ParLinearForm f(&fespace);
@@ -170,8 +172,12 @@ int main(int argc, char *argv[])
 
    // Initialize preconditioner
    HypreBoomerAMG amg(*K_mat);
+   amg.SetCycleType(1);
 
    // Initialize solver
+   //CGSolver pcg(MPI_COMM_WORLD);
+   //pcg.SetOperator(*K_mat);
+   //pcg.SetRelTol(1e-8);
    HyprePCG pcg(*K_mat);
    pcg.SetTol(1e-8);
    pcg.SetMaxIter(100000);
@@ -181,7 +187,6 @@ int main(int argc, char *argv[])
    // Solve Ku=f
    pcg.Mult(F_vec, W_gf.GetTrueVector());
    W_gf.SetFromTrueVector();
-
 
    // // Write the output
    ParaViewDataCollection pvdc("KirchoffLove", &pmesh);
