@@ -18,8 +18,8 @@ struct KL_Context
    double Ly = 1.0;
    double t = 0.1;
 
-   int Nx = 10;
-   int Ny = 10;
+   int Nx = 5;
+   int Ny = 5;
 
    int rs = 0;
    int order = 2;
@@ -70,24 +70,21 @@ public:
 
 double dp_test(const Vector &x)
 {
-   return -100*(24*pow(x[0],4)
-         - 48*pow(x[0],3)
-         + 72*pow(x[0],2)
-         - 48*x[0]
-         + 24*pow(x[1],4)
-         - 48*pow(x[1],3)
-         + 72*pow(x[1],2)
-         - 48*x[1]
-         + 288*pow(x[0],2)*pow(x[1],2)
-         - 288*x[0]*pow(x[1],2)
-         - 288*pow(x[0],2)*x[1]
-         + 288*x[0]*x[1]
-         + 8);
+   double c_x = cos(2*M_PI*x[0]);
+   double c_y = cos(2*M_PI*x[1]);
+   return 4*c_x*c_y - c_x - c_y;
 }
 
 double w_exact(const Vector &x)
 {
-   return -100*pow(x[0]*(1-x[0]),2)*pow(x[1]*(1-x[1]),2);
+   return (1.0/(16.0*pow(M_PI,4)))*(cos(2*M_PI*x[0])-1)*(cos(2*M_PI*x[1])-1);
+}
+
+void grad_w_exact(const Vector &x, Vector &grad_w)
+{
+   grad_w.SetSize(2);
+   grad_w[0] = (1.0/(16.0*pow(M_PI,4)))*(-2*M_PI*sin(2*M_PI*x[0]))*(cos(2*M_PI*x[1])-1);
+   grad_w[1] = (1.0/(16.0*pow(M_PI,4)))*(-2*M_PI*sin(2*M_PI*x[1]))*(cos(2*M_PI*x[0])-1);
 }
 
 int main(int argc, char *argv[])
@@ -212,16 +209,20 @@ int main(int argc, char *argv[])
    pvdc.SetHighOrderOutput(true);
    pvdc.RegisterField("Deformation", &W_gf);
 
-   ParGridFunction exact_gf(&fespace);
    FunctionCoefficient exact_coeff(w_exact);
+   VectorFunctionCoefficient exact_grad_coeff(2, grad_w_exact);
+
+   ParGridFunction exact_gf(&fespace);
    exact_gf.ProjectCoefficient(exact_coeff);
    pvdc.RegisterField("Exact", &exact_gf);
    pvdc.Save();
 
-   double err = W_gf.ComputeL2Error(exact_coeff);
+   double err_L2 = W_gf.ComputeL2Error(exact_coeff);
+   double err_H1 = W_gf.ComputeH1Error(&exact_coeff, &exact_grad_coeff);
    if (rank == 0)
    {
-      cout << "L2 Error: " << err << endl;
+      cout << "L2 Error: " << err_L2 << endl;
+      cout << "H1 Error: " << err_H1 << endl;
    }
 
    return 0;
