@@ -54,7 +54,7 @@ class C0InteriorPenaltyIntegrator : public BilinearFormIntegrator
    const double eta;
 
    // AssembleBlock Helpers:
-   mutable Vector n_b, dnshape_a, dnshape_b, nd2nshape_b, nv;
+   mutable Vector dnshape_a, dnshape_b, nd2nshape_b, nv;
 
    // AssembleFaceMatrix Helpers:
    mutable Vector normal_1, normal_2;
@@ -94,7 +94,6 @@ int main(int argc, char *argv[])
    args.AddOption(&ctx.delta_p_uniform, "-dp", "--delta-p", "Uniform pressure difference imposed onto panel.");
 
    args.AddOption(&ctx.eta, "-eta", "--penalty-coeff", "Penalty coefficient.");
-
 
    args.Parse();
    if (!args.Good())
@@ -200,8 +199,6 @@ void BiharmonicIntegrator::AssembleElementMatrix(const FiniteElement &el, Elemen
    int dim = el.GetDim();
 
    MFEM_ASSERT(dim == 2, "Dimension must be 2.");
-
-   double c, w;
 
    hessian.SetSize(ndof, dim * (dim + 1) / 2);
    elmat.SetSize(ndof);
