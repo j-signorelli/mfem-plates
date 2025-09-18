@@ -25,14 +25,14 @@ struct KL_Context
    int order = 2;
 
    // Material properties for 17-4PH stainless steel
-   double E = 1.0;//196.5e9;
+   double E = 196.5e9;
    double nu = 0.27;
 
-   double delta_p_uniform = 0.1;//1e6;
+   double delta_p_uniform = 1e3;
 
 
    // Penalty coefficient
-   double eta = 1e5;
+   double eta = 1e8;
 } ctx;
 
 class BiharmonicIntegrator : public BilinearFormIntegrator
@@ -138,7 +138,7 @@ int main(int argc, char *argv[])
    ConstantCoefficient p_load(-ctx.delta_p_uniform);
 
    // Compute bending stiffness D using E, nu, and t, as coefficient
-   double D_val = 2*pow(ctx.t,3)*ctx.E/(3*(1-ctx.nu));
+   double D_val = 2*pow(ctx.t,3)*ctx.E/(3*(1-pow(ctx.nu,2)));
    ConstantCoefficient D(D_val);
 
    // Initialize the bilinear form representing the LHS (stiffness matrix K in Ku=f)
@@ -172,12 +172,8 @@ int main(int argc, char *argv[])
 
    // Initialize preconditioner
    HypreBoomerAMG amg(*K_mat);
-   amg.SetCycleType(1);
 
    // Initialize solver
-   //CGSolver pcg(MPI_COMM_WORLD);
-   //pcg.SetOperator(*K_mat);
-   //pcg.SetRelTol(1e-8);
    HyprePCG pcg(*K_mat);
    pcg.SetTol(1e-8);
    pcg.SetMaxIter(100000);
