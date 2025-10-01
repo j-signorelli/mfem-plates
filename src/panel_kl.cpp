@@ -348,7 +348,7 @@ void C0InteriorPenaltyIntegrator::AssembleFaceMatrix(const FiniteElement &el1, c
    {
       const IntegrationPoint &ip = ir->IntPoint(p);
       Trans.SetAllIntPoints(&ip);
-      h_e += ip.weight * Trans.Face->Weight();
+      h_e += ip.weight * Trans.Weight();
    }
 
    for (int p = 0; p < ir->GetNPoints(); p++)
@@ -359,7 +359,7 @@ void C0InteriorPenaltyIntegrator::AssembleFaceMatrix(const FiniteElement &el1, c
       Trans.SetAllIntPoints(&ip);
 
       // Compute normals, derivatives, and hessians
-      CalcOrtho(Trans.Face->Jacobian(), normal_1);
+      CalcOrtho(Trans.Jacobian(), normal_1);
       normal_1 /= normal_1.Norml2();
       el1.CalcPhysDShape(*Trans.Elem1, dshape_1);
       el1.CalcPhysHessian(*Trans.Elem1, hessian_1);
@@ -392,7 +392,7 @@ void C0InteriorPenaltyIntegrator::AssembleFaceMatrix(const FiniteElement &el1, c
       // Apply 1/2 factor and symmetry term
       elmat_p.Symmetrize();
 
-      elmat_p *= ip.weight * Trans.Face->Weight();
+      elmat_p *= ip.weight * Trans.Weight();
 
       elmat += elmat_p;
    }
