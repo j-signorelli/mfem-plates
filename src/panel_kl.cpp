@@ -338,7 +338,7 @@ void C0InteriorPenaltyIntegrator::AssembleFaceMatrix(const FiniteElement &el1, c
    if (ir == NULL)
    {
       int order = 2 * max(el1.GetOrder(), ndof2 ? el2.GetOrder() : 0);
-      ir = &IntRules.Get(el1.GetGeomType(), order);
+      ir = &IntRules.Get(Trans.GetGeometryType(), order);
    }
 
 
@@ -360,7 +360,7 @@ void C0InteriorPenaltyIntegrator::AssembleFaceMatrix(const FiniteElement &el1, c
 
       // Compute normals, derivatives, and hessians
       CalcOrtho(Trans.Jacobian(), normal_1);
-      normal_1 /= normal_1.Norml2();
+      normal_1 /= -normal_1.Norml2();
       el1.CalcPhysDShape(*Trans.Elem1, dshape_1);
       el1.CalcPhysHessian(*Trans.Elem1, hessian_1);
       if (ndof2)
