@@ -360,7 +360,7 @@ void C0InteriorPenaltyIntegrator::AssembleFaceMatrix(const FiniteElement &el1, c
 
       // Compute normals, derivatives, and hessians
       CalcOrtho(Trans.Jacobian(), normal_1);
-      normal_1 /= -normal_1.Norml2();
+      normal_1 /= normal_1.Norml2();
       el1.CalcPhysDShape(*Trans.Elem1, dshape_1);
       el1.CalcPhysHessian(*Trans.Elem1, hessian_1);
       if (ndof2)
