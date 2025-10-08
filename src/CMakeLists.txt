@@ -7,5 +7,9 @@ target_link_libraries(panel_le PUBLIC mfem)
 add_executable(panel_kl panel_kl.cpp)
 target_link_libraries(panel_kl PUBLIC mfem)
 
+add_executable(test test.cpp)
+target_link_libraries(test PUBLIC mfem)
+
+
 install(TARGETS panel_le DESTINATION bin)
 install(TARGETS panel_kl DESTINATION bin)

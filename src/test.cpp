@@ -36,6 +36,14 @@ public:
    void AssembleFaceMatrix(const FiniteElement &el1, const FiniteElement &el2, FaceElementTransformations &Trans, DenseMatrix &elmat) override;
 };
 
+
+void GradRef_Phi3(const Vector &x_hat, Vector &grad_phi)
+{
+   grad_phi.SetSize(2);
+   grad_phi[0] = -8*x_hat[0]+4-4*x_hat[1];
+   grad_phi[1] = -4*x_hat[0];
+}
+
 int main(int argc, char *argv[])
 {
    int order = 2;
@@ -66,7 +74,8 @@ int main(int argc, char *argv[])
    args.PrintOptions(cout);
 
    // Generate mesh
-   Mesh m = Mesh::MakeCartesian2D(1,1,quads ? Element::Type::QUADRILATERAL : Element::Type::TRIANGLE, true);
+   Mesh m = Mesh::MakeCartesian2D(1,1,Element::Type::TRIANGLE, true);
+   //Mesh m("/home/j-signorelli/software/mfem/git_repo/data/ref-triangle.mesh", 1);
    m.SetCurvature(order); // ensure isoparametric!
 
    // Refine the mesh
@@ -79,54 +88,54 @@ int main(int argc, char *argv[])
    H1_FECollection fe_coll(order, 2);
    FiniteElementSpace fespace(&m, &fe_coll, 1);
 
-   ConstantCoefficient one(1.0);
-   // BilinearForm a_1(&fespace);
-   // a_1.AddDomainIntegrator(new BiharmonicIntegrator(one));
-   // a_1.Assemble(0);
-   // a_1.Finalize(0);
+   // ConstantCoefficient one(1.0);
+   // // BilinearForm a_1(&fespace);
+   // // a_1.AddDomainIntegrator(new BiharmonicIntegrator(one));
+   // // a_1.Assemble(0);
+   // // a_1.Finalize(0);
 
-   // BilinearForm a_2(&fespace);
-   // a_2.AddInteriorFaceIntegrator(new C0InteriorPenaltyIntegrator(order*(order+1)));
-   // a_2.Assemble(0);
-   // a_2.Finalize(0);
+   // // BilinearForm a_2(&fespace);
+   // // a_2.AddInteriorFaceIntegrator(new C0InteriorPenaltyIntegrator(order*(order+1)));
+   // // a_2.Assemble(0);
+   // // a_2.Finalize(0);
 
-   // Now assemble actual stuff
-   BilinearForm a(&fespace);
-   a.AddDomainIntegrator(new BiharmonicIntegrator(one));
-   a.AddInteriorFaceIntegrator(new C0InteriorPenaltyIntegrator(order*(order+1)));
-   a.Assemble();
-   a.Finalize();
-   DenseMatrix *a_mat = a.SpMat().ToDenseMatrix();
-   a_mat->PrintMatlab(mfem::out);
-   delete a_mat;
-   // cout << "Biharmonic Matrix:" << endl;
-   // DenseMatrix *a_1_mat = a_1.SpMat().ToDenseMatrix();
-   // //a_1_mat->Print(mfem::out, 100);
-   // delete a_1_mat;
+   // // Now assemble actual stuff
+   // BilinearForm a(&fespace);
+   // a.AddDomainIntegrator(new BiharmonicIntegrator(one));
+   // a.AddInteriorFaceIntegrator(new C0InteriorPenaltyIntegrator(order*(order+1)));
+   // a.Assemble();
+   // a.Finalize();
+   // DenseMatrix *a_mat = a.SpMat().ToDenseMatrix();
+   // a_mat->PrintMatlab(mfem::out);
+   // delete a_mat;
+   // // cout << "Biharmonic Matrix:" << endl;
+   // // DenseMatrix *a_1_mat = a_1.SpMat().ToDenseMatrix();
+   // // //a_1_mat->Print(mfem::out, 100);
+   // // delete a_1_mat;
    
-   // cout << "C0-IP Matrix:" << endl;
-   // DenseMatrix *a_2_mat = a_2.SpMat().ToDenseMatrix();
-   // //a_2_mat->Print(mfem::out, 100);
-   // delete a_2_mat;
+   // // cout << "C0-IP Matrix:" << endl;
+   // // DenseMatrix *a_2_mat = a_2.SpMat().ToDenseMatrix();
+   // // //a_2_mat->Print(mfem::out, 100);
+   // // delete a_2_mat;
 
-   LinearForm f(&fespace);
-   f.AddDomainIntegrator(new DomainLFIntegrator(one));
-   f.Assemble();
+   // LinearForm f(&fespace);
+   // f.AddDomainIntegrator(new DomainLFIntegrator(one));
+   // f.Assemble();
 
    GridFunction W_gf(&fespace);
    W_gf = 0.0;
-   W_gf.SetTrueVector();
+   // W_gf.SetTrueVector();
 
-   SparseMatrix A;
-   Vector B;
-   Array<int> boundary_dofs;
-   fespace.GetBoundaryTrueDofs(boundary_dofs);
-   a.FormLinearSystem(boundary_dofs, W_gf, f, A, W_gf.GetTrueVector(), B);
+   // SparseMatrix A;
+   // Vector B;
+   // Array<int> boundary_dofs;
+   // fespace.GetBoundaryTrueDofs(boundary_dofs);
+   // a.FormLinearSystem(boundary_dofs, W_gf, f, A, W_gf.GetTrueVector(), B);
 
-   GSSmoother M(A);
-   PCG(A, M, B, W_gf.GetTrueVector(), 1, 1000000, 1e-8, 0.0);
+   // GSSmoother M(A);
+   // PCG(A, M, B, W_gf.GetTrueVector(), 1, 1000000, 1e-8, 0.0);
 
-   W_gf.SetFromTrueVector();
+   // W_gf.SetFromTrueVector();
 
    if(visualization)
    {
@@ -137,13 +146,46 @@ int main(int argc, char *argv[])
       sol_sock << "solution\n" << m << W_gf << flush;
       sol_sock << "keys " << "cRnnnnm" << flush; // using dofs_numbering GLVis branch
    }
-   /*
+
    FaceElementTransformations &trans = *m.GetInteriorFaceTransformations(0);
-
-
+   const FiniteElement &fe1 = *fespace.GetFE(trans.Elem1No);
+   const FiniteElement &fe2 = *fespace.GetFE(trans.Elem2No);
+   
    cout << "Elem1No: " << trans.Elem1No << endl;
    cout << "Elem2No: " << trans.Elem2No << endl;
 
+   cout << "TERM 1: BIHARMONIC\n-----------------------------------" << endl;
+
+   cout << "Checking reference gradient evaluation of \\phi_3 over Elem " << trans.Elem1No << ":" << endl;
+   int biharmonic_integration_order = 2*fe1.GetOrder() + trans.Elem1->OrderW();
+   const IntegrationRule *ir = &IntRules.Get(trans.Elem1->GetGeometryType(),
+                                             biharmonic_integration_order);
+   
+   DenseMatrix gradP(fe1.GetDof(), 2);
+   Vector grad_phi_3(2), grad_phi_3_exact(2);
+   for (int i = 0; i < ir->GetNPoints(); i++)
+   {
+      const mfem::IntegrationPoint &ip = ir->IntPoint(i);
+      fe1.CalcDShape(ip, gradP);
+      gradP.GetRow(3, grad_phi_3);
+      GradRef_Phi3(Vector({ip.x, ip.y}), grad_phi_3_exact);
+      cout << "\t\\hat{IP}(" << ip.x << "," << ip.y << ") Error: " << grad_phi_3.DistanceTo(grad_phi_3_exact) << endl;
+   }
+
+
+   cout << "Checking reference Hessian evaluation of \\phi_3 over Elem " << trans.Elem1No << ":" << endl;
+   DenseMatrix hessian(fe1.GetDof(), 3);
+   Vector hessian_phi3(3);
+   for (int i = 0; i < ir->GetNPoints(); i++)
+   {
+      const mfem::IntegrationPoint &ip = ir->IntPoint(i);
+      fe1.CalcHessian(ip, hessian);
+      hessian.GetRow(3, hessian_phi3);
+      cout << "\t\\hat{IP}(" << ip.x << "," << ip.y << "):"; hessian_phi3.Print(mfem::out, 3);
+   }
+
+
+   /*
    trans.CheckConsistency(1, mfem::out);
 
    cout << endl << "Face DOFs' Locations: " << endl;
@@ -152,7 +194,32 @@ int main(int argc, char *argv[])
    IntegrationPoint ip;
    ip.x = eval_point;
    trans.SetAllIntPoints(&ip);
+   cout << endl << "Eval Point IP: " << ip.x << endl;
+   Vector ip_phys;
+   std::array<std::pair<ElementTransformation*, int>, 2> elems;
+   elems[0].first = trans.Elem1;
+   elems[0].second = trans.Elem1No;
+   elems[1].first = trans.Elem2;
+   elems[1].second = trans.Elem2No;
+   for (int i = 0; i < 2; i++)
+   {  
+      ElementTransformation &elem_T = *elems[i].first;
+      int elemNo = elems[i].second;
+      const IntegrationPoint &eip = elem_T.GetIntPoint();
+      const FiniteElement &fe = *fespace.GetFE(elemNo);
 
+      cout << endl << "Elem" << elemNo << " IP Reference Space: ( " << eip.x << " , " << eip.y << " )" << endl;
+      elem_T.Transform(eip, ip_phys);
+      cout << "Elem" << elemNo << " IP Physical Space: ( " << ip_phys[0] << " , " << ip_phys[1] << " )" << endl;
+      
+      
+      cout << endl << "CalcShape @ Eval Point: " << endl;
+      Vector shape(fe.GetDof());
+      fe.CalcShape(eip, shape);
+      shape.Print(mfem::out, fe.GetDof());
+   }
+   */
+   /*
    Vector ip1_phys, ip2_phys;
    trans.Elem1->Transform(trans.GetElement1IntPoint(), ip1_phys);
    trans.Elem2->Transform(trans.GetElement2IntPoint(), ip2_phys);
@@ -192,6 +259,7 @@ int main(int argc, char *argv[])
       cout << endl << endl << "IP" << p << ": " << ip.x << endl;
       cout << "Jacobian @ Eval Point: " << endl;
       trans.Jacobian().Print();
+      h_e += ip.weight*trans.Weight();
    }
    cout << "-------------------------------------------" << endl;
    cout << "Edge Length: " << h_e << endl;
