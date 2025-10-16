@@ -44,6 +44,13 @@ void GradRef_Phi3(const Vector &x_hat, Vector &grad_phi)
    grad_phi[1] = -4*x_hat[0];
 }
 
+void GradPhys_Phi3(const Vector &x_hat, Vector &grad_phi)
+{
+   grad_phi.SetSize(2);
+   grad_phi[0] = -4*x_hat[0] - 4*x_hat[1] + 4;
+   grad_phi[1] = -4*x_hat[0];
+}
+
 int main(int argc, char *argv[])
 {
    int order = 2;
@@ -154,9 +161,9 @@ int main(int argc, char *argv[])
    cout << "Elem1No: " << trans.Elem1No << endl;
    cout << "Elem2No: " << trans.Elem2No << endl;
 
-   cout << "TERM 1: BIHARMONIC\n-----------------------------------" << endl;
+   cout << endl << "TERM 1: BIHARMONIC\n-----------------------------------" << endl;
 
-   cout << "Checking reference gradient evaluation of \\phi_3 over Elem " << trans.Elem1No << ":" << endl;
+   cout << endl << "Checking reference gradient evaluation of \\phi_3 over Elem " << trans.Elem1No << ":" << endl;
    int biharmonic_integration_order = 2*fe1.GetOrder() + trans.Elem1->OrderW();
    const IntegrationRule *ir = &IntRules.Get(trans.Elem1->GetGeometryType(),
                                              biharmonic_integration_order);
@@ -173,7 +180,7 @@ int main(int argc, char *argv[])
    }
 
 
-   cout << "Checking reference Hessian evaluation of \\phi_3 over Elem " << trans.Elem1No << ":" << endl;
+   cout << endl << "Checking reference Hessian evaluation of \\phi_3 over Elem " << trans.Elem1No << ":" << endl;
    DenseMatrix hessian(fe1.GetDof(), 3);
    Vector hessian_phi3(3);
    for (int i = 0; i < ir->GetNPoints(); i++)
@@ -185,6 +192,79 @@ int main(int argc, char *argv[])
    }
 
 
+   cout << endl << "Checking Elem " << trans.Elem1No << " Jacobian: " << endl;
+   trans.Elem1->Jacobian().Print();
+
+   cout << endl << "Checking Elem " << trans.Elem1No << " Inverse Jacobian:" << endl;
+   trans.Elem1->InverseJacobian().Print();
+
+
+   cout << endl << "Checking physical gradient evaluation of \\phi_3 over Elem " << trans.Elem1No << ":" << endl;
+   DenseMatrix gradP_phys(fe1.GetDof(), 2);
+   Vector grad_phi_3_phys(2), grad_phi_3_exact_phys(2);
+   for (int i = 0; i < ir->GetNPoints(); i++)
+   {
+      const mfem::IntegrationPoint &ip = ir->IntPoint(i);
+      ElementTransformation &trans_1 = *trans.Elem1;
+      trans_1.SetIntPoint(&ip);
+      fe1.CalcPhysDShape(trans_1, gradP_phys);
+      gradP_phys.GetRow(3, grad_phi_3_phys);
+      GradPhys_Phi3(Vector({ip.x, ip.y}), grad_phi_3_exact_phys);
+      cout << "\t\\hat{IP}(" << ip.x << "," << ip.y << ") Error: " << grad_phi_3_phys.DistanceTo(grad_phi_3_exact_phys) << endl;
+   }
+
+   cout << endl << "Checking physical Hessian evaluation of \\phi_3 over Elem " << trans.Elem1No << ":" << endl;
+   DenseMatrix hessian_phys(fe1.GetDof(), 3);
+   Vector hessian_phi3_phys(3);
+   for (int i = 0; i < ir->GetNPoints(); i++)
+   {
+      const mfem::IntegrationPoint &ip = ir->IntPoint(i);
+      ElementTransformation &trans_1 = *trans.Elem1;
+      trans_1.SetIntPoint(&ip);
+      fe1.CalcPhysHessian(trans_1, hessian_phys);
+      hessian_phys.GetRow(3, hessian_phi3_phys);
+      cout << "\t\\hat{IP}(" << ip.x << "," << ip.y << "):"; hessian_phi3_phys.Print(mfem::out, 3);
+   }
+
+   cout << endl << "Checking det(J^-1): " << trans.Elem1->Weight() << endl;
+
+   // Set-up a 1 point quadrature rule for tris
+   IntegrationRule one_point(1);
+   one_point.IntPoint(0).x = 1.0/3.0;
+   one_point.IntPoint(0).y = 1.0/3.0;
+   one_point.IntPoint(0).weight = 0.5; // Reference area is 0.5
+
+
+   ConstantCoefficient one(1.0);
+   BilinearForm a_1(&fespace);
+   a_1.AddDomainIntegrator(new BiharmonicIntegrator(one));
+   a_1.GetDBFI()->operator[](0)->SetIntRule(&one_point);
+   a_1.Assemble(0);
+   a_1.Finalize(0);
+
+   cout << endl << "Biharmonic Matrix:" << endl;
+   DenseMatrix *a_1_mat = a_1.SpMat().ToDenseMatrix();
+   a_1_mat->PrintMatlab(mfem::out);
+   delete a_1_mat;
+
+   cout << endl << "TERM 2: JUMP MATRIX\n-----------------------------------" << endl;
+
+
+   // Set-up a 1 point quadrature rule for edges
+   IntegrationRule one_point_e(1);
+   one_point.IntPoint(0).x = 0.5;
+   one_point.IntPoint(0).weight = 1; // Reference edge length is likely just 1
+
+   BilinearForm a_2(&fespace);
+   a_2.AddInteriorFaceIntegrator(new C0InteriorPenaltyIntegrator(eta));
+   a_2.GetFBFI()->operator[](0)->SetIntRule(&one_point_e);
+   a_2.Assemble(0);
+   a_2.Finalize(0);
+
+   cout << endl << "Jump Matrix:" << endl;
+   DenseMatrix *a_2_mat = a_2.SpMat().ToDenseMatrix();
+   a_2_mat->PrintMatlab(mfem::out);
+   delete a_2_mat;
    /*
    trans.CheckConsistency(1, mfem::out);
 
@@ -336,8 +416,6 @@ void BiharmonicIntegrator::AssembleElementMatrix(const FiniteElement &el, Elemen
       factors *= D.Eval(Trans, ip) * ip.weight * Trans.Weight();
 
       AddMultADAt(hessian, factors, elmat);
-      // cout << "Biharmonic element matrix:" << endl;
-      // elmat.Print();
    }
 }
 
@@ -364,23 +442,10 @@ void C0InteriorPenaltyIntegrator::AssembleBlock(const DenseMatrix &dshape_a, con
    hessian_b.Mult(nv, nd2nshape_b);
 
    // Consistency term:
-   AddMult_a_VWt(1.0, dnshape_a, nd2nshape_b, elmat_ab);
-
-   // Consistency term:
-   //cout << "Element consistency matrix:" << endl;
-   //elmat_ab.Print(mfem::out, 1000);
-
+   AddMult_a_VWt(0.5, dnshape_a, nd2nshape_b, elmat_ab);
 
    // Penalty term (symmetric):
-   //cout << "Penalty matrix pre-coefficient application:" << endl;
-   //AddMult_a_VWt(1.0, dnshape_a, dnshape_b, elmat_ab);
-   //elmat_ab.Print(mfem::out, 100);
-   //elmat_ab = 0.0;
-
-   //cout << "Coefficient: " << eta << " / " << h_e << " = " << eta/h_e << endl;
-   //cout << "Penalty matrix post-coefficient application:" << endl;
-   AddMult_a_VWt(eta/h_e, dnshape_a, dnshape_b, elmat_ab);
-   //elmat_ab.Print(mfem::out, 100);
+   //AddMult_a_VWt(eta/h_e, dnshape_a, dnshape_b, elmat_ab);
 }
 
 /** Compute: q^(a,b) + p^(a,b)
@@ -479,7 +544,7 @@ void C0InteriorPenaltyIntegrator::AssembleFaceMatrix(const FiniteElement &el1, c
       }
 
       // Apply 1/2 factor and symmetry term
-      elmat_p.Symmetrize();
+      //elmat_p.Symmetrize();
 
       elmat_p *= ip.weight * Trans.Weight();
 
