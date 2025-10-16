@@ -84,7 +84,7 @@ int main(int argc, char *argv[])
    Mesh m = Mesh::MakeCartesian2D(1,1,Element::Type::TRIANGLE, true);
    //Mesh m("/home/j-signorelli/software/mfem/git_repo/data/ref-triangle.mesh", 1);
    m.SetCurvature(order); // ensure isoparametric!
-
+   m.EnsureNodes();
    // Refine the mesh
    for (int i = 0; i < rs; i++)
    {
@@ -211,6 +211,8 @@ int main(int argc, char *argv[])
       gradP_phys.GetRow(3, grad_phi_3_phys);
       GradPhys_Phi3(Vector({ip.x, ip.y}), grad_phi_3_exact_phys);
       cout << "\t\\hat{IP}(" << ip.x << "," << ip.y << ") Error: " << grad_phi_3_phys.DistanceTo(grad_phi_3_exact_phys) << endl;
+      cout << "\t\tNumerical: "; grad_phi_3_phys.Print();
+      cout << "\t\tExact: "; grad_phi_3_exact_phys.Print();
    }
 
    cout << endl << "Checking physical Hessian evaluation of \\phi_3 over Elem " << trans.Elem1No << ":" << endl;
@@ -237,31 +239,75 @@ int main(int argc, char *argv[])
 
    ConstantCoefficient one(1.0);
    BilinearForm a_1(&fespace);
-   a_1.AddDomainIntegrator(new BiharmonicIntegrator(one));
-   a_1.GetDBFI()->operator[](0)->SetIntRule(&one_point);
-   a_1.Assemble(0);
-   a_1.Finalize(0);
+   //a_1.AddDomainIntegrator(new DiffusionIntegrator(one));//new BiharmonicIntegrator(one));
+   //a_1.GetDBFI()->operator[](0)->SetIntRule(&one_point);
+   //a_1.Assemble(0);
+   //a_1.Finalize(0);
 
-   cout << endl << "Biharmonic Matrix:" << endl;
-   DenseMatrix *a_1_mat = a_1.SpMat().ToDenseMatrix();
-   a_1_mat->PrintMatlab(mfem::out);
-   delete a_1_mat;
+   // cout << endl << "Biharmonic Matrix:" << endl;
+   // DenseMatrix *a_1_mat = a_1.SpMat().ToDenseMatrix();
+   // a_1_mat->PrintMatlab(mfem::out);
+   // delete a_1_mat;
 
    cout << endl << "TERM 2: JUMP MATRIX\n-----------------------------------" << endl;
 
+   fespace.GetElementTransformation(1);
 
    // Set-up a 1 point quadrature rule for edges
    IntegrationRule one_point_e(1);
-   one_point.IntPoint(0).x = 0.5;
-   one_point.IntPoint(0).weight = 1; // Reference edge length is likely just 1
+   one_point_e.IntPoint(0).x = 0.5;
+   one_point_e.IntPoint(0).weight = 1; // Reference edge length is likely just 1
+
+
+   // Compute gradient of \phi_3 at the edge integration point
+   cout << "Physical gradient of \\phi_3 at edge midpoint for Elem " << trans.Elem1No << ": " << endl;
+   trans.SetAllIntPoints(&one_point_e.IntPoint(0));
+   IntegrationPoint test_ip;
+   test_ip.x = 0.310352;
+   test_ip.y = 0.636502;
+
+   ElementTransformation *el1_trans = fespace.GetElementTransformation(0);
+   //fespace.GetElementTransformation(1);
+   if (el1_trans != trans.Elem1)
+   {
+      cout << "FUCKED" << endl;
+      return -1;
+   }
+
+   trans.SetAllIntPoints(&test_ip);
+   //el1_trans->SetIntPoint(&test_ip);
+   //fe1.CalcPhysDShape(*el1_trans, gradP_phys);
+   fe1.CalcPhysDShape(*trans.Elem1, gradP_phys);
+   gradP_phys.GetRow(3, grad_phi_3_phys);
+   //double x_ip = el1_trans->GetIntPoint().x;//trans.Elem1->GetIntPoint().x;
+   //double y_ip = el1_trans->GetIntPoint().y;//trans.Elem1->GetIntPoint().y;
+   double x_ip = trans.Elem1->GetIntPoint().x;
+   double y_ip = trans.Elem1->GetIntPoint().y;
+   GradPhys_Phi3(Vector({x_ip, y_ip}), grad_phi_3_exact_phys);
+   cout << "\t\\hat{IP}(" << x_ip << "," << y_ip << "):" << endl;
+   cout << "\t\tNumerical: "; grad_phi_3_phys.Print();
+   cout << "\t\tExact: "; grad_phi_3_exact_phys.Print();
+   cout << endl;
+   
+
+   // Set-up Simpson quadrature rule for edges
+   IntegrationRule simpson(3);
+   simpson.IntPoint(0).x = 0.0;
+   simpson.IntPoint(0).weight = 1.0/6.0;
+   simpson.IntPoint(1).x = 0.5;
+   simpson.IntPoint(1).weight = 2.0/3.0;
+   simpson.IntPoint(2).x = 1.0;
+   simpson.IntPoint(2).weight = 1.0/6.0;
 
    BilinearForm a_2(&fespace);
    a_2.AddInteriorFaceIntegrator(new C0InteriorPenaltyIntegrator(eta));
    a_2.GetFBFI()->operator[](0)->SetIntRule(&one_point_e);
+   //a_2.GetFBFI()->operator[](0)->SetIntRule(&simpson);
    a_2.Assemble(0);
    a_2.Finalize(0);
 
    cout << endl << "Jump Matrix:" << endl;
+   //cout << endl << "Penalty Matrix:" << endl;
    DenseMatrix *a_2_mat = a_2.SpMat().ToDenseMatrix();
    a_2_mat->PrintMatlab(mfem::out);
    delete a_2_mat;
@@ -435,7 +481,7 @@ void C0InteriorPenaltyIntegrator::AssembleBlock(const DenseMatrix &dshape_a, con
    dshape_b.Mult(n_b, dnshape_b);
 
    // hessian_b = (dof, [3 in 2D])
-   nv[0] = pow(n_b[0],2);
+   nv[0] = n_b[0]*n_b[0];
    nv[1] = 2*n_b[0]*n_b[1];
    nv[2] = n_b[1]*n_b[1];
 
@@ -445,7 +491,7 @@ void C0InteriorPenaltyIntegrator::AssembleBlock(const DenseMatrix &dshape_a, con
    AddMult_a_VWt(0.5, dnshape_a, nd2nshape_b, elmat_ab);
 
    // Penalty term (symmetric):
-   //AddMult_a_VWt(eta/h_e, dnshape_a, dnshape_b, elmat_ab);
+   //AddMult_a_VWt(1.0, dnshape_a, dnshape_b, elmat_ab);
 }
 
 /** Compute: q^(a,b) + p^(a,b)
@@ -545,6 +591,7 @@ void C0InteriorPenaltyIntegrator::AssembleFaceMatrix(const FiniteElement &el1, c
 
       // Apply 1/2 factor and symmetry term
       //elmat_p.Symmetrize();
+
 
       elmat_p *= ip.weight * Trans.Weight();
 
