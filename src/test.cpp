@@ -54,23 +54,13 @@ void GradPhys_Phi3(const Vector &x_hat, Vector &grad_phi)
 int main(int argc, char *argv[])
 {
    int order = 2;
-   int rs = 0;
-   real_t eval_point = 0.5;
    bool visualization = true;
-   real_t eta = 1e3;
-   bool quads = true;
 
    OptionsParser args(argc, argv);
    args.AddOption(&order, "-o", "--order", "Element order.");
-   args.AddOption(&rs, "-rs", "--refine-serial", "Number of times to refine mesh in serial.");
-   args.AddOption(&eval_point, "-e", "--eval-point", "Evaluation point along face length in reference coordinates.");
-   args.AddOption(&quads, "-quad", "--quad-mesh", "-tri",
-                  "--tri-mesh",
-                  "Set mesh type.");
    args.AddOption(&visualization, "-vis", "--visualization", "-no-vis",
                   "--no-visualization",
                   "Enable or disable GLVis visualization.");
-   args.AddOption(&eta, "-eta", "--penalty-coeff", "Penalty coefficient.");
 
    args.Parse();
    if (!args.Good())
@@ -82,67 +72,14 @@ int main(int argc, char *argv[])
 
    // Generate mesh
    Mesh m = Mesh::MakeCartesian2D(1,1,Element::Type::TRIANGLE, true);
-   //Mesh m("/home/j-signorelli/software/mfem/git_repo/data/ref-triangle.mesh", 1);
    m.SetCurvature(order); // ensure isoparametric!
-   m.EnsureNodes();
-   // Refine the mesh
-   for (int i = 0; i < rs; i++)
-   {
-      m.UniformRefinement();
-   }
 
    // Initialize the FE collection and FiniteElementSpace
    H1_FECollection fe_coll(order, 2);
    FiniteElementSpace fespace(&m, &fe_coll, 1);
 
-   // ConstantCoefficient one(1.0);
-   // // BilinearForm a_1(&fespace);
-   // // a_1.AddDomainIntegrator(new BiharmonicIntegrator(one));
-   // // a_1.Assemble(0);
-   // // a_1.Finalize(0);
-
-   // // BilinearForm a_2(&fespace);
-   // // a_2.AddInteriorFaceIntegrator(new C0InteriorPenaltyIntegrator(order*(order+1)));
-   // // a_2.Assemble(0);
-   // // a_2.Finalize(0);
-
-   // // Now assemble actual stuff
-   // BilinearForm a(&fespace);
-   // a.AddDomainIntegrator(new BiharmonicIntegrator(one));
-   // a.AddInteriorFaceIntegrator(new C0InteriorPenaltyIntegrator(order*(order+1)));
-   // a.Assemble();
-   // a.Finalize();
-   // DenseMatrix *a_mat = a.SpMat().ToDenseMatrix();
-   // a_mat->PrintMatlab(mfem::out);
-   // delete a_mat;
-   // // cout << "Biharmonic Matrix:" << endl;
-   // // DenseMatrix *a_1_mat = a_1.SpMat().ToDenseMatrix();
-   // // //a_1_mat->Print(mfem::out, 100);
-   // // delete a_1_mat;
-   
-   // // cout << "C0-IP Matrix:" << endl;
-   // // DenseMatrix *a_2_mat = a_2.SpMat().ToDenseMatrix();
-   // // //a_2_mat->Print(mfem::out, 100);
-   // // delete a_2_mat;
-
-   // LinearForm f(&fespace);
-   // f.AddDomainIntegrator(new DomainLFIntegrator(one));
-   // f.Assemble();
-
    GridFunction W_gf(&fespace);
    W_gf = 0.0;
-   // W_gf.SetTrueVector();
-
-   // SparseMatrix A;
-   // Vector B;
-   // Array<int> boundary_dofs;
-   // fespace.GetBoundaryTrueDofs(boundary_dofs);
-   // a.FormLinearSystem(boundary_dofs, W_gf, f, A, W_gf.GetTrueVector(), B);
-
-   // GSSmoother M(A);
-   // PCG(A, M, B, W_gf.GetTrueVector(), 1, 1000000, 1e-8, 0.0);
-
-   // W_gf.SetFromTrueVector();
 
    if(visualization)
    {
@@ -161,156 +98,154 @@ int main(int argc, char *argv[])
    cout << "Elem1No: " << trans.Elem1No << endl;
    cout << "Elem2No: " << trans.Elem2No << endl;
 
-   cout << endl << "TERM 1: BIHARMONIC\n-----------------------------------" << endl;
-
-   cout << endl << "Checking reference gradient evaluation of \\phi_3 over Elem " << trans.Elem1No << ":" << endl;
-   int biharmonic_integration_order = 2*fe1.GetOrder() + trans.Elem1->OrderW();
-   const IntegrationRule *ir = &IntRules.Get(trans.Elem1->GetGeometryType(),
-                                             biharmonic_integration_order);
-   
-   DenseMatrix gradP(fe1.GetDof(), 2);
-   Vector grad_phi_3(2), grad_phi_3_exact(2);
-   for (int i = 0; i < ir->GetNPoints(); i++)
+   string LINE = "\n-------------------------------------------------------\n";
+   cout << "GRADIENT + HESSIAN VERIFICATIONS" << LINE;
    {
-      const mfem::IntegrationPoint &ip = ir->IntPoint(i);
-      fe1.CalcDShape(ip, gradP);
-      gradP.GetRow(3, grad_phi_3);
-      GradRef_Phi3(Vector({ip.x, ip.y}), grad_phi_3_exact);
-      cout << "\t\\hat{IP}(" << ip.x << "," << ip.y << ") Error: " << grad_phi_3.DistanceTo(grad_phi_3_exact) << endl;
-   }
+      cout << endl << "Checking reference gradient evaluation of \\phi_3 over Elem " << trans.Elem1No << ":" << endl;
+      int biharmonic_integration_order = 2*fe1.GetOrder() + trans.Elem1->OrderW();
+      const IntegrationRule *ir = &IntRules.Get(trans.Elem1->GetGeometryType(),
+                                                biharmonic_integration_order);
+      
+      DenseMatrix gradP(fe1.GetDof(), 2);
+      Vector grad_phi_3(2), grad_phi_3_exact(2);
+      for (int i = 0; i < ir->GetNPoints(); i++)
+      {
+         const mfem::IntegrationPoint &ip = ir->IntPoint(i);
+         fe1.CalcDShape(ip, gradP);
+         gradP.GetRow(3, grad_phi_3);
+         GradRef_Phi3(Vector({ip.x, ip.y}), grad_phi_3_exact);
+         cout << "\t\\hat{IP}(" << ip.x << "," << ip.y << ") Error: " << grad_phi_3.DistanceTo(grad_phi_3_exact) << endl;
+      }
 
 
-   cout << endl << "Checking reference Hessian evaluation of \\phi_3 over Elem " << trans.Elem1No << ":" << endl;
-   DenseMatrix hessian(fe1.GetDof(), 3);
-   Vector hessian_phi3(3);
-   for (int i = 0; i < ir->GetNPoints(); i++)
-   {
-      const mfem::IntegrationPoint &ip = ir->IntPoint(i);
-      fe1.CalcHessian(ip, hessian);
-      hessian.GetRow(3, hessian_phi3);
-      cout << "\t\\hat{IP}(" << ip.x << "," << ip.y << "):"; hessian_phi3.Print(mfem::out, 3);
-   }
+      cout << endl << "Checking reference Hessian evaluation of \\phi_3 over Elem " << trans.Elem1No << ":" << endl;
+      DenseMatrix hessian(fe1.GetDof(), 3);
+      Vector hessian_phi3(3);
+      for (int i = 0; i < ir->GetNPoints(); i++)
+      {
+         const mfem::IntegrationPoint &ip = ir->IntPoint(i);
+         fe1.CalcHessian(ip, hessian);
+         hessian.GetRow(3, hessian_phi3);
+         cout << "\t\\hat{IP}(" << ip.x << "," << ip.y << "):"; hessian_phi3.Print(mfem::out, 3);
+      }
 
 
-   cout << endl << "Checking Elem " << trans.Elem1No << " Jacobian: " << endl;
-   trans.Elem1->Jacobian().Print();
+      cout << endl << "Checking Elem " << trans.Elem1No << " Jacobian: " << endl;
+      trans.Elem1->Jacobian().Print();
 
-   cout << endl << "Checking Elem " << trans.Elem1No << " Inverse Jacobian:" << endl;
-   trans.Elem1->InverseJacobian().Print();
+      cout << endl << "Checking Elem " << trans.Elem1No << " Inverse Jacobian:" << endl;
+      trans.Elem1->InverseJacobian().Print();
 
 
-   cout << endl << "Checking physical gradient evaluation of \\phi_3 over Elem " << trans.Elem1No << ":" << endl;
-   DenseMatrix gradP_phys(fe1.GetDof(), 2);
-   Vector grad_phi_3_phys(2), grad_phi_3_exact_phys(2);
-   for (int i = 0; i < ir->GetNPoints(); i++)
-   {
-      const mfem::IntegrationPoint &ip = ir->IntPoint(i);
-      ElementTransformation &trans_1 = *trans.Elem1;
-      trans_1.SetIntPoint(&ip);
-      fe1.CalcPhysDShape(trans_1, gradP_phys);
+      cout << endl << "Checking physical gradient evaluation of \\phi_3 over Elem " << trans.Elem1No << ":" << endl;
+      DenseMatrix gradP_phys(fe1.GetDof(), 2);
+      Vector grad_phi_3_phys(2), grad_phi_3_exact_phys(2);
+      for (int i = 0; i < ir->GetNPoints(); i++)
+      {
+         const mfem::IntegrationPoint &ip = ir->IntPoint(i);
+         ElementTransformation &trans_1 = *trans.Elem1;
+         trans_1.SetIntPoint(&ip);
+         fe1.CalcPhysDShape(trans_1, gradP_phys);
+         gradP_phys.GetRow(3, grad_phi_3_phys);
+         GradPhys_Phi3(Vector({ip.x, ip.y}), grad_phi_3_exact_phys);
+         cout << "\t\\hat{IP}(" << ip.x << "," << ip.y << ") Error: " << grad_phi_3_phys.DistanceTo(grad_phi_3_exact_phys) << endl;
+      }
+
+      cout << endl << "Checking physical Hessian evaluation of \\phi_3 over Elem " << trans.Elem1No << ":" << endl;
+      DenseMatrix hessian_phys(fe1.GetDof(), 3);
+      Vector hessian_phi3_phys(3);
+      for (int i = 0; i < ir->GetNPoints(); i++)
+      {
+         const mfem::IntegrationPoint &ip = ir->IntPoint(i);
+         ElementTransformation &trans_1 = *trans.Elem1;
+         trans_1.SetIntPoint(&ip);
+         fe1.CalcPhysHessian(trans_1, hessian_phys);
+         hessian_phys.GetRow(3, hessian_phi3_phys);
+         cout << "\t\\hat{IP}(" << ip.x << "," << ip.y << "):"; hessian_phi3_phys.Print(mfem::out, 3);
+      }
+
+      cout << endl << "Checking det(J^-1): " << trans.Elem1->Weight() << endl;
+
+      // Compute gradient of \phi_3 at the edge integration point
+      cout << "Physical gradient of \\phi_3 at edge midpoint for Elem " << trans.Elem1No << ": " << endl;
+      IntegrationPoint ip_mid;
+      ip_mid.x = 0.5;
+      trans.SetAllIntPoints(&ip_mid);
+      fe1.CalcPhysDShape(*trans.Elem1, gradP_phys);
       gradP_phys.GetRow(3, grad_phi_3_phys);
-      GradPhys_Phi3(Vector({ip.x, ip.y}), grad_phi_3_exact_phys);
-      cout << "\t\\hat{IP}(" << ip.x << "," << ip.y << ") Error: " << grad_phi_3_phys.DistanceTo(grad_phi_3_exact_phys) << endl;
+      double x_ip = trans.Elem1->GetIntPoint().x;
+      double y_ip = trans.Elem1->GetIntPoint().y;
+      GradPhys_Phi3(Vector({x_ip, y_ip}), grad_phi_3_exact_phys);
+      cout << "\t\\hat{IP}(" << x_ip << "," << y_ip << ") Error: " << grad_phi_3_phys.DistanceTo(grad_phi_3_exact_phys) << endl;
       cout << "\t\tNumerical: "; grad_phi_3_phys.Print();
-      cout << "\t\tExact: "; grad_phi_3_exact_phys.Print();
+      cout << "\t\tExact:     "; grad_phi_3_exact_phys.Print();
+      cout << endl;
+
+      Vector n_1(2);
+      CalcOrtho(trans.Jacobian(), n_1);
+      n_1 /= n_1.Norml2();
+      cout << "Physical normal of Elem " << trans.Elem1No << ": "; n_1.Print();
+
+      real_t dphi3dn = grad_phi_3_phys*n_1;
+      cout << "Normal component of \\phi_3: " << dphi3dn << endl;
    }
 
-   cout << endl << "Checking physical Hessian evaluation of \\phi_3 over Elem " << trans.Elem1No << ":" << endl;
-   DenseMatrix hessian_phys(fe1.GetDof(), 3);
-   Vector hessian_phi3_phys(3);
-   for (int i = 0; i < ir->GetNPoints(); i++)
+   cout << endl << "TERM 1: BIHARMONIC" << LINE;
    {
-      const mfem::IntegrationPoint &ip = ir->IntPoint(i);
-      ElementTransformation &trans_1 = *trans.Elem1;
-      trans_1.SetIntPoint(&ip);
-      fe1.CalcPhysHessian(trans_1, hessian_phys);
-      hessian_phys.GetRow(3, hessian_phi3_phys);
-      cout << "\t\\hat{IP}(" << ip.x << "," << ip.y << "):"; hessian_phi3_phys.Print(mfem::out, 3);
+      // Set-up a 1 point quadrature rule for tris
+      IntegrationRule one_point(1);
+      one_point.IntPoint(0).x = 1.0/3.0;
+      one_point.IntPoint(0).y = 1.0/3.0;
+      one_point.IntPoint(0).weight = 0.5; // Reference area is 0.5
+
+
+      ConstantCoefficient one(1.0);
+      BilinearForm a_1(&fespace);
+      a_1.AddDomainIntegrator(new BiharmonicIntegrator(one));
+      a_1.GetDBFI()->operator[](0)->SetIntRule(&one_point);
+      a_1.Assemble(0);
+      a_1.Finalize(0);
+
+      cout << endl << "Biharmonic Matrix:" << endl;
+      DenseMatrix *a_1_mat = a_1.SpMat().ToDenseMatrix();
+      a_1_mat->PrintMatlab(mfem::out);
+      delete a_1_mat;
    }
 
-   cout << endl << "Checking det(J^-1): " << trans.Elem1->Weight() << endl;
-
-   // Set-up a 1 point quadrature rule for tris
-   IntegrationRule one_point(1);
-   one_point.IntPoint(0).x = 1.0/3.0;
-   one_point.IntPoint(0).y = 1.0/3.0;
-   one_point.IntPoint(0).weight = 0.5; // Reference area is 0.5
-
-
-   ConstantCoefficient one(1.0);
-   BilinearForm a_1(&fespace);
-   //a_1.AddDomainIntegrator(new DiffusionIntegrator(one));//new BiharmonicIntegrator(one));
-   //a_1.GetDBFI()->operator[](0)->SetIntRule(&one_point);
-   //a_1.Assemble(0);
-   //a_1.Finalize(0);
-
-   // cout << endl << "Biharmonic Matrix:" << endl;
-   // DenseMatrix *a_1_mat = a_1.SpMat().ToDenseMatrix();
-   // a_1_mat->PrintMatlab(mfem::out);
-   // delete a_1_mat;
-
-   cout << endl << "TERM 2: JUMP MATRIX\n-----------------------------------" << endl;
-
-   fespace.GetElementTransformation(1);
-
-   // Set-up a 1 point quadrature rule for edges
-   IntegrationRule one_point_e(1);
-   one_point_e.IntPoint(0).x = 0.5;
-   one_point_e.IntPoint(0).weight = 1; // Reference edge length is likely just 1
-
-
-   // Compute gradient of \phi_3 at the edge integration point
-   cout << "Physical gradient of \\phi_3 at edge midpoint for Elem " << trans.Elem1No << ": " << endl;
-   trans.SetAllIntPoints(&one_point_e.IntPoint(0));
-   IntegrationPoint test_ip;
-   test_ip.x = 0.310352;
-   test_ip.y = 0.636502;
-
-   ElementTransformation *el1_trans = fespace.GetElementTransformation(0);
-   //fespace.GetElementTransformation(1);
-   if (el1_trans != trans.Elem1)
+   cout << endl << "TERM 2: JUMP MATRIX" << LINE;
    {
-      cout << "FUCKED" << endl;
-      return -1;
+      // Set-up a 1 point quadrature rule for edges
+      IntegrationRule one_point_e(1);
+      one_point_e.IntPoint(0).x = 0.5;
+      one_point_e.IntPoint(0).weight = 1; // Reference edge length is likely just 1
+      
+
+      // Set-up Simpson quadrature rule for edges
+      IntegrationRule simpson(3);
+      simpson.IntPoint(0).x = 0.0;
+      simpson.IntPoint(0).weight = 1.0/6.0;
+      simpson.IntPoint(1).x = 0.5;
+      simpson.IntPoint(1).weight = 2.0/3.0;
+      simpson.IntPoint(2).x = 1.0;
+      simpson.IntPoint(2).weight = 1.0/6.0;
+
+      BilinearForm a_2(&fespace);
+      a_2.AddInteriorFaceIntegrator(new C0InteriorPenaltyIntegrator(1.0));
+      a_2.AddBdrFaceIntegrator(new C0InteriorPenaltyIntegrator(1.0));
+      a_2.GetFBFI()->operator[](0)->SetIntRule(&one_point_e);
+      a_2.GetBFBFI()->operator[](0)->SetIntRule(&one_point_e);
+      a_2.Assemble(0);
+      a_2.Finalize(0);
+
+      cout << endl << "Jump Matrix:" << endl;
+      DenseMatrix *a_2_mat = a_2.SpMat().ToDenseMatrix();
+      a_2_mat->PrintMatlab(mfem::out);
+      delete a_2_mat;
    }
 
-   trans.SetAllIntPoints(&test_ip);
-   //el1_trans->SetIntPoint(&test_ip);
-   //fe1.CalcPhysDShape(*el1_trans, gradP_phys);
-   fe1.CalcPhysDShape(*trans.Elem1, gradP_phys);
-   gradP_phys.GetRow(3, grad_phi_3_phys);
-   //double x_ip = el1_trans->GetIntPoint().x;//trans.Elem1->GetIntPoint().x;
-   //double y_ip = el1_trans->GetIntPoint().y;//trans.Elem1->GetIntPoint().y;
-   double x_ip = trans.Elem1->GetIntPoint().x;
-   double y_ip = trans.Elem1->GetIntPoint().y;
-   GradPhys_Phi3(Vector({x_ip, y_ip}), grad_phi_3_exact_phys);
-   cout << "\t\\hat{IP}(" << x_ip << "," << y_ip << "):" << endl;
-   cout << "\t\tNumerical: "; grad_phi_3_phys.Print();
-   cout << "\t\tExact: "; grad_phi_3_exact_phys.Print();
-   cout << endl;
-   
 
-   // Set-up Simpson quadrature rule for edges
-   IntegrationRule simpson(3);
-   simpson.IntPoint(0).x = 0.0;
-   simpson.IntPoint(0).weight = 1.0/6.0;
-   simpson.IntPoint(1).x = 0.5;
-   simpson.IntPoint(1).weight = 2.0/3.0;
-   simpson.IntPoint(2).x = 1.0;
-   simpson.IntPoint(2).weight = 1.0/6.0;
 
-   BilinearForm a_2(&fespace);
-   a_2.AddInteriorFaceIntegrator(new C0InteriorPenaltyIntegrator(eta));
-   a_2.GetFBFI()->operator[](0)->SetIntRule(&one_point_e);
-   //a_2.GetFBFI()->operator[](0)->SetIntRule(&simpson);
-   a_2.Assemble(0);
-   a_2.Finalize(0);
 
-   cout << endl << "Jump Matrix:" << endl;
-   //cout << endl << "Penalty Matrix:" << endl;
-   DenseMatrix *a_2_mat = a_2.SpMat().ToDenseMatrix();
-   a_2_mat->PrintMatlab(mfem::out);
-   delete a_2_mat;
    /*
    trans.CheckConsistency(1, mfem::out);
 
