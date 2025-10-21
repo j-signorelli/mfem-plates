@@ -143,7 +143,7 @@ int main(int argc, char *argv[])
    // Initialize solver
    HyprePCG pcg(*K_mat);
    pcg.SetTol(1e-8);
-   pcg.SetMaxIter(1000);
+   pcg.SetMaxIter(1e8);
    pcg.SetPrintLevel(2);
    pcg.SetPreconditioner(amg);
 
