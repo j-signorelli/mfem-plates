@@ -154,6 +154,7 @@ int main(int argc, char *argv[])
 
    // Write the output
    ParaViewDataCollection pvdc("LinearElasticity", &pmesh);
+   pvdc.SetHighOrderOutput(true);
    pvdc.RegisterField("Displacement", &U_gf);
    pvdc.Save();
 
