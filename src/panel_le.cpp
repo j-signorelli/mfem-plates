@@ -11,22 +11,21 @@ using namespace std;
 // Define variables for miniapp settings
 struct LE_Context
 {
-   double Lx = 1.0;
-   double Ly = 1.0;
-   double t  = 0.1;
+   double Lx = 101.06e-3; // mm
+   double Ly = 76.2e-3; // mm
+   double t  = 1.27e-3; // mm ; actual thickness is 0.127e-3 mm;
 
    int Nx  = 10;
    int Ny  = 10;
-   int Nz  = 10;
+   int Nz  = 5;
 
    int rs    = 0;
    int order = 2;
 
-   // Material properties for 17-4PH stainless steel
-   double E  = 196.5e9;
+   double E  = 196.5e9; // Pa
    double nu = 0.27;
 
-   double delta_p_uniform = 1e3;
+   double delta_p_uniform = 1e3; // Pa
 
 
 } ctx;
