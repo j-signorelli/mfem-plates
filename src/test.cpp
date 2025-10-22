@@ -37,7 +37,7 @@ public:
 };
 
 
-void ExactPhysHessian(DenseMatrix &hess)
+void Elem0_ExactPhysHessian(DenseMatrix &hess)
 {
    hess = 0.0;
    
@@ -58,7 +58,12 @@ void ExactPhysHessian(DenseMatrix &hess)
    hess(5,2) = -8;
 }
 
-void ExactPhysDShape(const Vector &x_vec, DenseMatrix &dshape)
+void Elem1_ExactPhysHessian(DenseMatrix &hess)
+{
+   Elem0_ExactPhysHessian(hess);
+}
+
+void Elem0_ExactPhysDShape(const Vector &x_vec, DenseMatrix &dshape)
 {
    double x = x_vec[0];
    double y = x_vec[1];
@@ -80,6 +85,58 @@ void ExactPhysDShape(const Vector &x_vec, DenseMatrix &dshape)
 
    dshape(5,0) = 4*y-4;
    dshape(5,1) = 4*x-8*y+4;
+}
+
+void Elem0_ExactNormalPhysDShape(const Vector &x_vec, Vector &grad_n)
+{
+   double x = x_vec[0];
+   double y = x_vec[1];
+
+   grad_n[0] = -4*y+3;
+   grad_n[1] = 4*x-1;
+   grad_n[2] = 8*x-8*y+2;
+   grad_n[3] = 4*x-4*y+4;
+   grad_n[4] = -12*x+4*y;
+   grad_n[5] = -4*x+12*y-8;
+   grad_n *= sqrt(2.0)/2.0;
+}
+
+void Elem1_ExactPhysDShape(const Vector &x_vec, DenseMatrix &dshape)
+{
+   double x = x_vec[0];
+   double y = x_vec[1];
+
+   dshape(0,0) = 0;
+   dshape(0,1) = 4*y-1;
+
+   dshape(1,0) = 4*x-3;
+   dshape(1,1) = 0;
+
+   dshape(2,0) = 4*x-4*y-1;
+   dshape(2,1) = -4*x+4*y+1;
+
+   dshape(3,0) = -4*y;
+   dshape(3,1) = -4*x+4;
+
+   dshape(4,0) = -8*x+4*y+4;
+   dshape(4,1) = 4*x-4;
+
+   dshape(5,0) = 4*y;
+   dshape(5,1) = 4*x-8*y;
+}
+
+void Elem1_ExactNormalPhysDShape(const Vector &x_vec, Vector &grad_n)
+{
+   double x = x_vec[0];
+   double y = x_vec[1];
+
+   grad_n[0] = 4*y-1;
+   grad_n[1] = -4*x+3;
+   grad_n[2] = -8*x+8*y+2;
+   grad_n[3] = -4*x+4*y+4;
+   grad_n[4] = 12*x-4*y-8;
+   grad_n[5] = 4*x-12*y;
+   grad_n *= sqrt(2.0)/2.0;
 }
 
 int main(int argc, char *argv[])
@@ -127,72 +184,113 @@ int main(int argc, char *argv[])
    {
       FaceElementTransformations &trans = *m.GetInteriorFaceTransformations(0);
       const FiniteElement &fe1 = *fespace.GetFE(trans.Elem1No);
+      const FiniteElement &fe2 = *fespace.GetFE(trans.Elem2No);
+
       ElementTransformation &trans_1 = *trans.Elem1;
+      ElementTransformation &trans_2 = *trans.Elem2;
 
-      // Define integration rule to check all nodes
-      // Match reference tri
-      IntegrationRule ir(6);
-      
-      // DOF 0:
-      ir.IntPoint(0).x = 0.0;
-      ir.IntPoint(0).y = 0.0;
-
-      // DOF 1:
-      ir.IntPoint(1).x = 1.0;
-      ir.IntPoint(1).y = 0.0;
-
-      // DOF 2:
-      ir.IntPoint(2).x = 0.0;
-      ir.IntPoint(2).y = 1.0;
-
-      // DOF 3:
-      ir.IntPoint(3).x = 0.5;
-      ir.IntPoint(3).y = 0.0;
-
-      // DOF 4:
-      ir.IntPoint(4).x = 0.5;
-      ir.IntPoint(4).y = 0.5;
-
-      // DOF 5:
-      ir.IntPoint(5).x = 0.0;
-      ir.IntPoint(5).y = 0.5;
-
-      cout << endl << "Checking physical gradient evaluation over Elem " << trans.Elem1No << ":" << endl;
-      DenseMatrix physDShape_num(fe1.GetDof(), 2);
-      DenseMatrix physDShape_ex(fe1.GetDof(), 2);
-      DenseMatrix physDShape_diff(fe1.GetDof(), 2);
-      for (int i = 0; i < ir.GetNPoints(); i++)
+      for (int elem = 0; elem < 2; elem++)
       {
-         const IntegrationPoint &ip = ir.IntPoint(i);
-         trans_1.SetIntPoint(&ip);
-         fe1.CalcPhysDShape(trans_1, physDShape_num);
-         
+         const FiniteElement &fe = (elem == 0) ? fe1 : fe2;
+         ElementTransformation &el_trans = (elem == 0) ? trans_1 : trans_2;
+         const IntegrationRule &ir = fe.GetNodes();
+
+         cout << endl << "Checking physical gradient evaluation over Elem " << elem << ":" << endl;
+         DenseMatrix physDShape_num(fe.GetDof(), 2);
+         DenseMatrix physDShape_ex(fe.GetDof(), 2);
+         DenseMatrix physDShape_diff(fe.GetDof(), 2);
+         for (int i = 0; i < ir.GetNPoints(); i++)
+         {
+            const IntegrationPoint &ip = ir.IntPoint(i);
+            el_trans.SetIntPoint(&ip);
+            fe.CalcPhysDShape(el_trans, physDShape_num);
+            
+            Vector coords;
+            el_trans.Transform(ip, coords);
+
+            if (elem == 0)
+            {
+               Elem0_ExactPhysDShape(coords, physDShape_ex);
+            }
+            else
+            {
+               Elem1_ExactPhysDShape(coords, physDShape_ex);
+            }
+            
+
+            physDShape_diff = physDShape_num;
+            physDShape_diff -= physDShape_ex;
+
+            cout << "IP(" << coords[0] << "," << coords[1] << "):" << endl;
+            physDShape_num.PrintMatlab();
+            cout << "Max Error: " << physDShape_diff.MaxMaxNorm() << endl << endl;
+         }
+
+         cout << endl << "Checking physical Hessian evaluation over Elem " << elem << ":" << endl;
+         DenseMatrix physHess_num(fe.GetDof(), 3);
+         DenseMatrix physHess_ex(fe.GetDof(), 3);
+         DenseMatrix physHess_diff(fe.GetDof(), 3);
+         for (int i = 0; i < ir.GetNPoints(); i++)
+         {
+            const IntegrationPoint &ip = ir.IntPoint(i);
+            el_trans.SetIntPoint(&ip);
+            fe1.CalcPhysHessian(el_trans, physHess_num);
+
+            Vector coords;
+            el_trans.Transform(ip, coords);
+
+            if (elem == 0)
+            {
+               Elem0_ExactPhysHessian(physHess_ex);
+            }
+            else
+            {
+               Elem1_ExactPhysHessian(physHess_ex);
+            }
+
+            physHess_diff = physHess_num;
+            physHess_diff -= physHess_ex;
+
+            cout << "IP(" << coords[0] << "," << coords[1] << ") Max Error: " << physHess_diff.MaxMaxNorm() << endl;
+         }
+
+         // Consider midpoint of element interior edge -- compute normal
+         IntegrationPoint ip_mid;
+         ip_mid.x = 0.5;
+         trans.SetAllIntPoints(&ip_mid);
+         Vector normal(2);
+         CalcOrtho(trans.Jacobian(), normal);
+         normal /= normal.Norml2();
+         if (elem == 1)
+         {
+            normal *= -1;
+         }
+
+         cout << endl << "Element " << elem << " normal: "; normal.Print(); cout << endl;
+
+         cout << endl << "Checking normal gradient evaluation on Elem " << elem << " edge midpoint:" << endl;
+         Vector physNorDShape_num(fe.GetDof());
+         Vector physNorDShape_ex(fe.GetDof());
+
+         fe.CalcPhysDShape(el_trans, physDShape_num);
+         physDShape_num.Mult(normal, physNorDShape_num);
+
          Vector coords;
-         trans_1.Transform(ip, coords);
-         ExactPhysDShape(coords, physDShape_ex);
-         
-         physDShape_diff = physDShape_num;
-         physDShape_diff -= physDShape_ex;
+         trans.Transform(ip_mid, coords);
+         cout << "Physical Coordinate: (" << coords[0] << "," << coords[1] << ")" << endl;
+         if (elem == 0)
+         {
+            Elem0_ExactNormalPhysDShape(coords, physNorDShape_ex);
+         }
+         else
+         {
+            Elem1_ExactNormalPhysDShape(coords, physNorDShape_ex);
+         }
 
-         cout << "\t\\hat{IP}(" << ip.x << "," << ip.y << ") Max Error: " << physDShape_diff.MaxMaxNorm() << endl;
-      }
 
-      cout << endl << "Checking physical Hessian evaluation over Elem " << trans.Elem1No << ":" << endl;
-      DenseMatrix physHess_num(fe1.GetDof(), 3);
-      DenseMatrix physHess_ex(fe1.GetDof(), 3);
-      DenseMatrix physHess_diff(fe1.GetDof(), 3);
-      for (int i = 0; i < ir.GetNPoints(); i++)
-      {
-         const IntegrationPoint &ip = ir.IntPoint(i);
-         trans_1.SetIntPoint(&ip);
-         fe1.CalcPhysHessian(trans_1, physHess_num);
-
-         ExactPhysHessian(physHess_ex);
-
-         physHess_diff = physHess_num;
-         physHess_diff -= physHess_ex;
-
-         cout << "\t\\hat{IP}(" << ip.x << "," << ip.y << ") Max Error:" << physHess_diff.MaxMaxNorm() << endl;
+         cout << "Numerical: "; physNorDShape_num.Print();
+         cout << "Exact: "; physNorDShape_ex.Print();
+         cout << "Error: " << physNorDShape_num.DistanceTo(physNorDShape_ex) << endl;
       }
    }
 
