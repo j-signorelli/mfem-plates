@@ -335,7 +335,7 @@ int main(int argc, char *argv[])
       delete a_1_mat;
    }
 
-   cout << endl << "TERM 2: JUMP MATRIX" << LINE;
+   cout << endl << "TERM 2/3: JUMP/PENALTY MATRIX" << LINE;
    {
       // Set-up a 1 point quadrature rule for edges
       IntegrationRule one_point_e(1);
@@ -353,17 +353,52 @@ int main(int argc, char *argv[])
       simpson.IntPoint(2).weight = 1.0/6.0;
 
       BilinearForm a_2(&fespace);
-      a_2.AddInteriorFaceIntegrator(new C0InteriorPenaltyIntegrator(1.0));
+      //a_2.AddInteriorFaceIntegrator(new C0InteriorPenaltyIntegrator(1.0));
       a_2.AddBdrFaceIntegrator(new C0InteriorPenaltyIntegrator(1.0));
-      a_2.GetFBFI()->operator[](0)->SetIntRule(&simpson);
+      //a_2.GetFBFI()->operator[](0)->SetIntRule(&simpson);
       a_2.GetBFBFI()->operator[](0)->SetIntRule(&simpson);
       a_2.Assemble(0);
       a_2.Finalize(0);
 
-      cout << endl << "Penalty Matrix:" << endl;
+      cout << endl << "Jump + Penalty Matrix:" << endl;
       DenseMatrix *a_2_mat = a_2.SpMat().ToDenseMatrix();
       a_2_mat->PrintMatlab(mfem::out);
       delete a_2_mat;
+   }
+
+   cout << endl << "ALL:" << LINE;
+   {
+      // Set-up a 1 point quadrature rule for tris
+      IntegrationRule one_point(1);
+      one_point.IntPoint(0).x = 1.0/3.0;
+      one_point.IntPoint(0).y = 1.0/3.0;
+      one_point.IntPoint(0).weight = 0.5; // Reference area is 0.5
+
+      // Set-up Simpson quadrature rule for edges
+      IntegrationRule simpson(3);
+      simpson.IntPoint(0).x = 0.0;
+      simpson.IntPoint(0).weight = 1.0/6.0;
+      simpson.IntPoint(1).x = 0.5;
+      simpson.IntPoint(1).weight = 2.0/3.0;
+      simpson.IntPoint(2).x = 1.0;
+      simpson.IntPoint(2).weight = 1.0/6.0;
+
+
+      BilinearForm a(&fespace);
+      ConstantCoefficient one(1.0);
+      a.AddDomainIntegrator(new BiharmonicIntegrator(one));
+      a.GetDBFI()->operator[](0)->SetIntRule(&one_point);
+      a.AddInteriorFaceIntegrator(new C0InteriorPenaltyIntegrator(1.0));
+      a.AddBdrFaceIntegrator(new C0InteriorPenaltyIntegrator(1.0));
+      a.GetFBFI()->operator[](0)->SetIntRule(&simpson);
+      a.GetBFBFI()->operator[](0)->SetIntRule(&simpson);
+      a.Assemble(0);
+      a.Finalize(0);
+
+      cout << endl << "Entire Matrix:" << endl;
+      DenseMatrix *a_mat = a.SpMat().ToDenseMatrix();
+      a_mat->PrintMatlab(mfem::out);
+      delete a_mat;
    }
 
 
@@ -634,7 +669,7 @@ void C0InteriorPenaltyIntegrator::AssembleFaceMatrix(const FiniteElement &el1, c
       }
 
       // Then just add penalty
-      elmatJ_p = 0.0;
+      elmatJ_p *= -1;
       elmatJ_p += elmatC_p;
       elmatJ_p *= ip.weight * Trans.Weight();
       elmat += elmatJ_p;
