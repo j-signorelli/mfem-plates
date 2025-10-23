@@ -20,9 +20,6 @@ public:
 class C0InteriorPenaltyIntegrator : public BilinearFormIntegrator
 {
 private:
-
-   void SetHessVec2D(const Vector &nor, Vector &nv);
-
    const double eta;
 
    // AssembleFaceMatrix Helpers:
@@ -526,14 +523,6 @@ void BiharmonicIntegrator::AssembleElementMatrix(const FiniteElement &el, Elemen
    }
 }
 
-
-void C0InteriorPenaltyIntegrator::SetHessVec2D(const Vector &nor, Vector &nv)
-{
-   nv[0] = nor[0]*nor[0];
-   nv[1] = 2*nor[0]*nor[1];
-   nv[2] = nor[1]*nor[1];
-}
-
 void C0InteriorPenaltyIntegrator::AssembleFaceMatrix(const FiniteElement &el1, const FiniteElement &el2, FaceElementTransformations &Trans, DenseMatrix &elmat)
 {
    int dim = el1.GetDim();
@@ -616,7 +605,9 @@ void C0InteriorPenaltyIntegrator::AssembleFaceMatrix(const FiniteElement &el1, c
          els[i]->CalcPhysDShape(*el_trans[i], dshape[i]);
          els[i]->CalcPhysHessian(*el_trans[i], hessian[i]);
          dshape[i].Mult(normal[i], dnshape[i]);
-         SetHessVec2D(normal[i], nv[i]);
+         nv[i][0] = normal[i][0]*normal[i][0];
+         nv[i][1] = 2*normal[i][0]*normal[i][1];
+         nv[i][2] = normal[i][1]*normal[i][1];
          hessian[i].Mult(nv[i], nd2nshape[i]);
       }
 
