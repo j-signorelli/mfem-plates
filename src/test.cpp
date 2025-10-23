@@ -19,19 +19,18 @@ public:
 
 class C0InteriorPenaltyIntegrator : public BilinearFormIntegrator
 {
+private:
+
+   void SetHessVec2D(const Vector &nor, Vector &nv);
+
    const double eta;
 
-   // AssembleBlock Helpers:
-   mutable Vector n_b, dnshape_a, dnshape_b, nd2nshape_b, nv;
-
    // AssembleFaceMatrix Helpers:
-   mutable Vector normal_1, normal_2;
-   mutable DenseMatrix dshape_1, dshape_2, hessian_1, hessian_2, block11, block12, block21, block22, elmat_p;
+   mutable Vector normal_1, normal_2, dnshape_1, dnshape_2,  nv_1, nv_2, nd2nshape_1, nd2nshape_2;
+   mutable DenseMatrix dshape_1, dshape_2, hessian_1, hessian_2, block11, block12, block21, block22, elmatJ_p, elmatC_p;
 
 public:
    C0InteriorPenaltyIntegrator(double eta_) : eta(eta_) {};
-
-   void AssembleBlock(const DenseMatrix &dshape_a, const DenseMatrix &dshape_b, const DenseMatrix &hessian_b, const Vector &n_a, const Vector &n_b, double h_e, DenseMatrix &elmat_ab);
 
    void AssembleFaceMatrix(const FiniteElement &el1, const FiniteElement &el2, FaceElementTransformations &Trans, DenseMatrix &elmat) override;
 };
@@ -291,6 +290,30 @@ int main(int argc, char *argv[])
          cout << "Numerical: "; physNorDShape_num.Print();
          cout << "Exact: "; physNorDShape_ex.Print();
          cout << "Error: " << physNorDShape_num.DistanceTo(physNorDShape_ex) << endl;
+
+
+         cout << endl << "Checking normal Hessian evaluation on Elem " << elem << " edge midpoint:" << endl;
+         Vector physNorHess_num(fe.GetDof());
+         Vector physNorHess_ex(fe.GetDof());
+
+         fe.CalcPhysDShape(el_trans, physDShape_num);
+         physDShape_num.Mult(normal, physNorDShape_num);
+
+         trans.Transform(ip_mid, coords);
+         cout << "Physical Coordinate: (" << coords[0] << "," << coords[1] << ")" << endl;
+         if (elem == 0)
+         {
+            Elem0_ExactNormalPhysDShape(coords, physNorDShape_ex);
+         }
+         else
+         {
+            Elem1_ExactNormalPhysDShape(coords, physNorDShape_ex);
+         }
+
+
+         cout << "Numerical: "; physNorDShape_num.Print();
+         cout << "Exact: "; physNorDShape_ex.Print();
+         cout << "Error: " << physNorDShape_num.DistanceTo(physNorDShape_ex) << endl;
       }
    }
 
@@ -334,10 +357,10 @@ int main(int argc, char *argv[])
       simpson.IntPoint(2).weight = 1.0/6.0;
 
       BilinearForm a_2(&fespace);
-      a_2.AddInteriorFaceIntegrator(new C0InteriorPenaltyIntegrator(1.0));
-      //a_2.AddBdrFaceIntegrator(new C0InteriorPenaltyIntegrator(1.0));
-      a_2.GetFBFI()->operator[](0)->SetIntRule(&one_point_e);
-      //a_2.GetBFBFI()->operator[](0)->SetIntRule(&one_point_e);
+      //a_2.AddInteriorFaceIntegrator(new C0InteriorPenaltyIntegrator(1.0));
+      a_2.AddBdrFaceIntegrator(new C0InteriorPenaltyIntegrator(1.0));
+      //a_2.GetFBFI()->operator[](0)->SetIntRule(&one_point_e);
+      a_2.GetBFBFI()->operator[](0)->SetIntRule(&one_point_e);
       a_2.Assemble(0);
       a_2.Finalize(0);
 
@@ -504,49 +527,14 @@ void BiharmonicIntegrator::AssembleElementMatrix(const FiniteElement &el, Elemen
    }
 }
 
-void C0InteriorPenaltyIntegrator::AssembleBlock(const DenseMatrix &dshape_a, const DenseMatrix &dshape_b, const DenseMatrix &hessian_b, const Vector &n_a, const Vector &n_b, double h_e, DenseMatrix &elmat_ab)
-{  
-   elmat_ab = 0.0;
 
-   dnshape_a.SetSize(dshape_a.NumRows()); // ndofs_a
-   dnshape_b.SetSize(dshape_b.NumRows()); // ndofs_b
-   nd2nshape_b.SetSize(hessian_b.NumRows()); // ndofs_b
-   nv.SetSize(hessian_b.NumCols());
-
-   // dshape_a = (dof, dim)
-   dshape_a.Mult(n_a, dnshape_a);
-
-   cout << "dnshape_a: "; dnshape_b.Print();
-
-   // dshape_b = (dof, dim)
-   dshape_b.Mult(n_b, dnshape_b);
-
-   // hessian_b = (dof, [3 in 2D])
-   nv[0] = n_b[0]*n_b[0];
-   nv[1] = 2*n_b[0]*n_b[1];
-   nv[2] = n_b[1]*n_b[1];
-
-   hessian_b.Mult(nv, nd2nshape_b);
-
-   cout << "nd2nshape_b: "; nd2nshape_b.Print();
-
-   // Consistency term:
-   AddMult_a_VWt(0.5, dnshape_a, nd2nshape_b, elmat_ab);
-
-   // Penalty term (symmetric):
-   //AddMult_a_VWt(1.0, dnshape_a, dnshape_b, elmat_ab);
+void C0InteriorPenaltyIntegrator::SetHessVec2D(const Vector &nor, Vector &nv)
+{
+   nv[0] = nor[0]*nor[0];
+   nv[1] = 2*nor[0]*nor[1];
+   nv[2] = nor[1]*nor[1];
 }
 
-/** Compute: q^(a,b) + p^(a,b)
-         
-         q^(a,b) = [d\phi^(a)/dn^(a)][d^2\phi^b/dn^(a)^2], or
-         q^(a,b) = [(grad \phi^a) dot n^(a)]*[n^(b)^T dot hess(\phi)^b dot n^(b)]
-
-         and
-
-         p^(a,b) = [d\phi^(a)/dn^(a)][d\phi^(b)/dn^(b)] or
-                 = [(grad \phi^a) dot n^(a)][(grad \phi^b) dot n^(b)]
-*/
 void C0InteriorPenaltyIntegrator::AssembleFaceMatrix(const FiniteElement &el1, const FiniteElement &el2, FaceElementTransformations &Trans, DenseMatrix &elmat)
 {
    int dim = el1.GetDim();
@@ -563,18 +551,25 @@ void C0InteriorPenaltyIntegrator::AssembleFaceMatrix(const FiniteElement &el1, c
    normal_1.SetSize(dim);
    dshape_1.SetSize(ndof1, dim);
    hessian_1.SetSize(ndof1, dim * (dim + 1) / 2);
+   nv_1.SetSize(dim * (dim + 1) / 2);
+   dnshape_1.SetSize(ndof1);
+   nd2nshape_1.SetSize(ndof1);
    block11.SetSize(ndof1, ndof1);
    if (ndof2 > 0)
    {
       dshape_2.SetSize(ndof2, dim);
       normal_2.SetSize(dim);
       hessian_2.SetSize(ndof2, dim * (dim + 1) / 2);
+      nv_2.SetSize(dim * (dim + 1) / 2);
+      dnshape_2.SetSize(ndof2);
+      nd2nshape_2.SetSize(ndof2);
       block12.SetSize(ndof1, ndof2);
       block21.SetSize(ndof2, ndof1);
       block22.SetSize(ndof2, ndof2);
    }
+   elmatJ_p.SetSize(ndof1 + ndof2);
+   elmatC_p.SetSize(ndof1 + ndof2);
    elmat.SetSize(ndof1 + ndof2);
-   elmat_p.SetSize(ndof1 + ndof2);
    elmat = 0.0;
 
    const IntegrationRule *ir = IntRule;
@@ -583,7 +578,6 @@ void C0InteriorPenaltyIntegrator::AssembleFaceMatrix(const FiniteElement &el1, c
       int order = 2 * max(el1.GetOrder(), ndof2 ? el2.GetOrder() : 0);
       ir = &IntRules.Get(Trans.GetGeometryType(), order);
    }
-
 
    // Compute edge length
    double h_e  = 0.0;
@@ -596,48 +590,78 @@ void C0InteriorPenaltyIntegrator::AssembleFaceMatrix(const FiniteElement &el1, c
 
    for (int p = 0; p < ir->GetNPoints(); p++)
    {
+      block11 = 0.0;
+      elmatJ_p = 0.0;
+      elmatC_p = 0.0;
+
       const IntegrationPoint &ip = ir->IntPoint(p);
 
       // Set the integration point in the face and the neighboring elements
       Trans.SetAllIntPoints(&ip);
 
-      // Compute normals, derivatives, and hessians
+      // Compute normal gradients + Hessians
       CalcOrtho(Trans.Jacobian(), normal_1);
       normal_1 /= normal_1.Norml2();
       el1.CalcPhysDShape(*Trans.Elem1, dshape_1);
       el1.CalcPhysHessian(*Trans.Elem1, hessian_1);
+      dshape_1.Mult(normal_1, dnshape_1);
+      SetHessVec2D(normal_1, nv_1);
+      hessian_1.Mult(nv_1, nd2nshape_1);
       if (ndof2)
       {
          normal_2 = normal_1;
          normal_2 *= -1.0;
          el2.CalcPhysDShape(*Trans.Elem2, dshape_2);
          el2.CalcPhysHessian(*Trans.Elem2, hessian_2);
+         dshape_2.Mult(normal_2, dnshape_2);
+         SetHessVec2D(normal_2, nv_2);
+         hessian_2.Mult(nv_2, nd2nshape_2);
+         block12 = 0.0;
+         block21 = 0.0;
+         block22 = 0.0;
       }
 
       // (1,1) block
-      AssembleBlock(dshape_1, dshape_1, hessian_1, normal_1, normal_1, h_e, block11);
-      elmat_p.SetSubMatrix(0, 0, block11);
-      if (ndof2 > 0)
+      AddMult_a_VWt(1.0, dnshape_1, nd2nshape_1, block11);
+      elmatJ_p.SetSubMatrix(0, 0, block11);
+
+      AddMult_a_VWt(eta/h_e, dnshape_1, dnshape_1, block11);
+      elmatC_p.SetSubMatrix(0, 0, block11);
+
+      if (ndof2)
       {
          // (1,2) block
-         AssembleBlock(dshape_1, dshape_2, hessian_2, normal_1, normal_2, h_e, block12);
-         elmat_p.SetSubMatrix(0, ndof1, block12);
+         AddMult_a_VWt(1.0, dnshape_1, nd2nshape_2, block12);
+         elmatJ_p.SetSubMatrix(0, ndof1, block12);
+
+         AddMult_a_VWt(eta/h_e, dnshape_1, dnshape_2, block12);
+         elmatC_p.SetSubMatrix(0, ndof1, block12);
 
          // (2,1) block
-         AssembleBlock(dshape_2, dshape_1, hessian_1, normal_2, normal_1, h_e, block21);
-         elmat_p.SetSubMatrix(ndof1, 0, block21);
+         AddMult_a_VWt(1.0, dnshape_2, nd2nshape_1, block21);
+         elmatJ_p.SetSubMatrix(ndof1, 0, block21);
+
+         AddMult_a_VWt(eta/h_e, dnshape_2, dnshape_1, block21);
+         elmatC_p.SetSubMatrix(ndof1, 0, block21);
 
          // (2,2) block
-         AssembleBlock(dshape_2, dshape_2, hessian_2, normal_2, normal_2, h_e, block22);
-         elmat_p.SetSubMatrix(ndof1, ndof1, block22);
+         AddMult_a_VWt(1.0, dnshape_2, nd2nshape_2, block22);
+         elmatJ_p.SetSubMatrix(ndof1, ndof1, block22);
+
+         AddMult_a_VWt(eta/h_e, dnshape_2, dnshape_2, block22);
+         elmatC_p.SetSubMatrix(ndof1, ndof1, block22);
       }
 
-      // Apply 1/2 factor and symmetry term
-      //elmat_p.Symmetrize();
+      // Symmetrize the jump term
+      elmatJ_p.Symmetrize();
+      if (!ndof2)
+      {
+         elmatJ_p *= 2;
+      }
 
-
-      elmat_p *= ip.weight * Trans.Weight();
-
-      elmat += elmat_p;
+      // Then just add penalty
+      //elmatJ_p += elmatC_p;
+      elmatJ_p *= ip.weight * Trans.Weight();
+      elmat += elmatJ_p;
    }
 }
