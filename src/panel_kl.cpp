@@ -138,15 +138,29 @@ int main(int argc, char *argv[])
    m.SetCurvature(ctx.order); // ensure isoparametric!
    int dim = m.Dimension();
 
-   // Partition the mesh
-   ParMesh pmesh(MPI_COMM_WORLD, m);
-
    Array<int> ref;
+   Array<double> h;
    Array<double> l2_error;
    Array<double> h1_error;
-   // Refine the mesh
+
    for (int i = 0; i < ctx.rs; i++)
    {
+
+      // Get the average spacing
+      double h_sum = 0.0;
+      Array<int> vertices(2);
+      for (int f = 0; f < m.GetNumFaces(); f++)
+      {
+         m.GetFace(f)->GetVertices(vertices);
+         Vector x1(m.GetVertex(vertices[0]), 2);
+         Vector x2(m.GetVertex(vertices[1]), 2);
+
+         h_sum += x1.DistanceTo(x2);
+      }
+      h.Append(h_sum/m.GetNumFaces());
+
+      // Partition the mesh
+      ParMesh pmesh(MPI_COMM_WORLD, m);
 
       // Initialize the FE collection and FiniteElementSpace
       H1_FECollection fe_coll(ctx.order, dim);
@@ -241,7 +255,7 @@ int main(int argc, char *argv[])
       ref.Append(i);
       l2_error.Append(err_L2);
       h1_error.Append(err_H1);
-      pmesh.UniformRefinement();
+      m.UniformRefinement();
    }
    if (rank == 0)
    {
@@ -250,6 +264,7 @@ int main(int argc, char *argv[])
       cout << "Eta: " << ctx.eta << endl;
       cout << "Order: " << ctx.order << endl;
       cout << "Refinements: "; ref.Print(cout, ctx.rs);
+      cout << "Average Grid Spacings: "; h.Print(cout, ctx.rs);
       cout << "L2 Errors: "; l2_error.Print(cout, ctx.rs);
       cout << "H1 Errors: "; h1_error.Print(cout, ctx.rs);
    }
@@ -388,7 +403,7 @@ void C0InteriorPenaltyIntegrator::AssembleFaceMatrix(const FiniteElement &el1, c
          {  
             blockJ[i][j] = 0.0;
             blockC[i][j] = 0.0;
-            AddMult_a_VWt(1.0, dnshape[i], nd2nshape[j], blockJ[i][j]);
+            AddMult_a_VWt(-1.0, dnshape[i], nd2nshape[j], blockJ[i][j]);
             elmatJ_p.SetSubMatrix(i*ndof[0], j*ndof[0], blockJ[i][j]);
             
             AddMult_a_VWt(eta/h_e, dnshape[i], dnshape[j], blockC[i][j]);
@@ -404,7 +419,6 @@ void C0InteriorPenaltyIntegrator::AssembleFaceMatrix(const FiniteElement &el1, c
       }
 
       // Then just add penalty
-      elmatJ_p *= -1;
       elmatJ_p += elmatC_p;
       elmatJ_p *= ip.weight * Trans.Weight();
       elmat += elmatJ_p;
