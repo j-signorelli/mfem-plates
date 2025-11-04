@@ -16,7 +16,7 @@ struct KL_Context
 {
    double Lx = 101.06e-3; // mm
    double Ly = 76.2e-3; // mm
-   double t  = 1.27e-3; // mm ; actual thickness is 0.127e-3 mm;
+   double t  = 0.127e-3; // mm
 
    int Nx = 10;
    int Ny = 10;
@@ -28,7 +28,6 @@ struct KL_Context
    double nu = 0.27;
 
    double delta_p_uniform = 1e3; // Pa
-
 
    // Penalty coefficient
    double eta = 10;
