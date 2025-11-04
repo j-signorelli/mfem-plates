@@ -73,6 +73,9 @@ int main(int argc, char *argv[])
    int rank = Mpi::WorldRank();
    Hypre::Init();
 
+   StopWatch timer_total, timer_mesh, timer_assembly, timer_solve, timer_output;
+   timer_total.Start(); // Total timer start
+
    // Parse command line args
    OptionsParser args(argc, argv);
    args.AddOption(&ctx.Lx, "-Lx", "--length-x", "Panel length in x-direction.");
@@ -117,7 +120,9 @@ int main(int argc, char *argv[])
    }
 
    // Partition the mesh
+   timer_mesh.Start(); // Mesh timer start
    ParMesh pmesh(MPI_COMM_WORLD, m);
+   timer_mesh.Stop(); // Mesh timer stop
 
    // Initialize the FE collection and FiniteElementSpace
    H1_FECollection fe_coll(ctx.order, dim);
@@ -138,6 +143,8 @@ int main(int argc, char *argv[])
    // Compute bending stiffness D using E, nu, and t, as coefficient
    double D_val = 2*pow(ctx.t,3)*ctx.E/(3*(1-pow(ctx.nu,2)));
    ConstantCoefficient D(D_val);
+
+   timer_assembly.Start(); // Assembly timer start
 
    // Initialize the bilinear form representing the LHS (stiffness matrix K in Ku=f)
    ParBilinearForm k(&fespace);
@@ -167,6 +174,7 @@ int main(int argc, char *argv[])
    // Apply boundary conditions to the matrix system
    std::unique_ptr<HypreParMatrix> K_e(K_mat->EliminateRowsCols(ess_tdof_list));
    K_mat->EliminateBC(*K_e, ess_tdof_list, W_gf.GetTrueVector(), F_vec);
+   timer_assembly.Stop(); // Assembly timer stop
 
    // Initialize preconditioner
    HypreBoomerAMG amg(*K_mat);
@@ -179,7 +187,9 @@ int main(int argc, char *argv[])
    pcg.SetPreconditioner(amg);
    
    // Solve Ku=f
+   timer_solve.Start(); // Solve timer start
    pcg.Mult(F_vec, W_gf.GetTrueVector());
+   timer_solve.Stop(); // Solve timer stop
    W_gf.SetFromTrueVector();
 
    double max_def = ParNormlp(W_gf.GetTrueVector(), infinity(), MPI_COMM_WORLD);
@@ -190,11 +200,25 @@ int main(int argc, char *argv[])
    }
 
    // // Write the output
+   timer_output.Start(); // Output timer start
    ParaViewDataCollection pvdc(ctx.output_name + "_RS" + std::to_string(ctx.rs), &pmesh);
    pvdc.SetHighOrderOutput(true);
    pvdc.RegisterField("Deformation", &W_gf);
    pvdc.Save();
+   timer_output.Stop(); // Output timer stop
 
+   timer_total.Stop(); // Total timer stop
+
+   if (rank == 0)
+   {
+      cout << endl;
+      cout << "Timing" << endl;
+      cout << "Mesh partition time: " << timer_mesh.RealTime()    << " s" << endl;
+      cout << "Assembly time:       " << timer_assembly.RealTime()    << " s" << endl;
+      cout << "Solve time:          " << timer_solve.RealTime()    << " s" << endl;
+      cout << "Output time:         " << timer_output.RealTime()    << " s" << endl;
+      cout << "Total runtime:       " << timer_total.RealTime()    << " s" << endl;
+   }
    return 0;
 }
 
