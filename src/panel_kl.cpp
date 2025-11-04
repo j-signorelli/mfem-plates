@@ -31,6 +31,9 @@ struct KL_Context
 
    // Penalty coefficient
    double eta = 10;
+
+   std::string output_name = "KirchoffLove";
+
 } ctx;
 
 class BiharmonicIntegrator : public BilinearFormIntegrator
@@ -89,6 +92,8 @@ int main(int argc, char *argv[])
 
    args.AddOption(&ctx.eta, "-eta", "--penalty-coeff", "Penalty coefficient.");
 
+   args.AddOption(&ctx.output_name, "-out", "--output-name", "Output directory name.");
+   
    args.Parse();
    if (!args.Good())
    {
@@ -178,7 +183,7 @@ int main(int argc, char *argv[])
    W_gf.SetFromTrueVector();
 
    // // Write the output
-   ParaViewDataCollection pvdc("KirchoffLove_RS" + std::to_string(ctx.rs), &pmesh);
+   ParaViewDataCollection pvdc(ctx.output_name + "_RS" + std::to_string(ctx.rs), &pmesh);
    pvdc.SetHighOrderOutput(true);
    pvdc.RegisterField("Deformation", &W_gf);
    pvdc.Save();
