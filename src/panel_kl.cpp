@@ -178,7 +178,7 @@ int main(int argc, char *argv[])
    W_gf.SetFromTrueVector();
 
    // // Write the output
-   ParaViewDataCollection pvdc("KirchoffLove", &pmesh);
+   ParaViewDataCollection pvdc("KirchoffLove_RS" + std::to_string(ctx.rs), &pmesh);
    pvdc.SetHighOrderOutput(true);
    pvdc.RegisterField("Deformation", &W_gf);
    pvdc.Save();
