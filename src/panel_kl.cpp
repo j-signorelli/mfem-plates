@@ -182,6 +182,13 @@ int main(int argc, char *argv[])
    pcg.Mult(F_vec, W_gf.GetTrueVector());
    W_gf.SetFromTrueVector();
 
+   double max_def = ParNormlp(W_gf.GetTrueVector(), infinity(), MPI_COMM_WORLD);
+   
+   if (rank == 0)
+   {
+      cout << endl << "Max Deformation: " << max_def << endl;
+   }
+
    // // Write the output
    ParaViewDataCollection pvdc(ctx.output_name + "_RS" + std::to_string(ctx.rs), &pmesh);
    pvdc.SetHighOrderOutput(true);
