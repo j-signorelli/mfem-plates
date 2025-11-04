@@ -27,7 +27,7 @@ struct KL_Context
    double E = 196.5e9; // Pa
    double nu = 0.27;
 
-   double delta_p_uniform = 1e3; // Pa
+   double delta_p_uniform = 4e3; // Pa
 
    // Penalty coefficient
    double eta = 10;

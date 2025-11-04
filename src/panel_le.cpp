@@ -25,7 +25,7 @@ struct LE_Context
    double E  = 196.5e9; // Pa
    double nu = 0.27;
 
-   double delta_p_uniform = 1e3; // Pa - TODO update this
+   double delta_p_uniform = 4e3; // Pa
 
    std::string output_name = "LinearElasticity";
 
