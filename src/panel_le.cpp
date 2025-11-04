@@ -27,6 +27,8 @@ struct LE_Context
 
    double delta_p_uniform = 1e3; // Pa - TODO update this
 
+   std::string output_name = "LinearElasticity";
+
 } ctx;
 
 int main(int argc, char *argv[])
@@ -54,6 +56,8 @@ int main(int argc, char *argv[])
    args.AddOption(&ctx.nu, "-nu", "--poisson-ratio", "Poisson ratio of the panel.");
    
    args.AddOption(&ctx.delta_p_uniform, "-dp", "--delta-p", "Uniform pressure difference imposed onto panel.");
+
+   args.AddOption(&ctx.output_name, "-out", "--output-name", "Output directory name.");
 
    args.Parse();
    if (!args.Good())
@@ -152,7 +156,7 @@ int main(int argc, char *argv[])
    U_gf.SetFromTrueVector();
 
    // Write the output
-   ParaViewDataCollection pvdc("LinearElasticity", &pmesh);
+   ParaViewDataCollection pvdc(ctx.output_name + "_RS" + std::to_string(ctx.rs), &pmesh);
    pvdc.SetHighOrderOutput(true);
    pvdc.RegisterField("Displacement", &U_gf);
    pvdc.Save();
