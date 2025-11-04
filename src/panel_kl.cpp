@@ -16,7 +16,7 @@ struct KL_Context
 {
    double Lx = 101.06e-3; // mm
    double Ly = 76.2e-3; // mm
-   double t  = 1.27e-3; // mm ; actual thickness is 0.127e-3 mm;
+   double t  = 0.5e-3; // mm
 
    int Nx = 10;
    int Ny = 10;
@@ -27,11 +27,13 @@ struct KL_Context
    double E = 196.5e9; // Pa
    double nu = 0.27;
 
-   double delta_p_uniform = 1e3; // Pa
-
+   double delta_p_uniform = 4e3; // Pa
 
    // Penalty coefficient
    double eta = 10;
+
+   std::string output_name = "KirchoffLove";
+
 } ctx;
 
 class BiharmonicIntegrator : public BilinearFormIntegrator
@@ -93,6 +95,8 @@ int main(int argc, char *argv[])
 
    args.AddOption(&ctx.eta, "-eta", "--penalty-coeff", "Penalty coefficient.");
 
+   args.AddOption(&ctx.output_name, "-out", "--output-name", "Output directory name.");
+   
    args.Parse();
    if (!args.Good())
    {
@@ -188,9 +192,16 @@ int main(int argc, char *argv[])
    timer_solve.Stop(); // Solve timer stop
    W_gf.SetFromTrueVector();
 
+   double max_def = ParNormlp(W_gf.GetTrueVector(), infinity(), MPI_COMM_WORLD);
+   
+   if (rank == 0)
+   {
+      cout << endl << "Max Deformation: " << max_def << endl;
+   }
+
    // // Write the output
    timer_output.Start(); // Output timer start
-   ParaViewDataCollection pvdc("KirchoffLove", &pmesh);
+   ParaViewDataCollection pvdc(ctx.output_name + "_RS" + std::to_string(ctx.rs), &pmesh);
    pvdc.SetHighOrderOutput(true);
    pvdc.RegisterField("Deformation", &W_gf);
    pvdc.Save();

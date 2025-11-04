@@ -13,7 +13,7 @@ struct LE_Context
 {
    double Lx = 101.06e-3; // mm
    double Ly = 76.2e-3; // mm
-   double t  = 1.27e-3; // mm ; actual thickness is 0.127e-3 mm;
+   double t  = 0.5e-3; // mm
 
    int Nx  = 10;
    int Ny  = 10;
@@ -25,8 +25,9 @@ struct LE_Context
    double E  = 196.5e9; // Pa
    double nu = 0.27;
 
-   double delta_p_uniform = 1e3; // Pa
+   double delta_p_uniform = 4e3; // Pa
 
+   std::string output_name = "LinearElasticity";
 
 } ctx;
 
@@ -58,6 +59,8 @@ int main(int argc, char *argv[])
    args.AddOption(&ctx.nu, "-nu", "--poisson-ratio", "Poisson ratio of the panel.");
    
    args.AddOption(&ctx.delta_p_uniform, "-dp", "--delta-p", "Uniform pressure difference imposed onto panel.");
+
+   args.AddOption(&ctx.output_name, "-out", "--output-name", "Output directory name.");
 
    args.Parse();
    if (!args.Good())
@@ -162,9 +165,21 @@ int main(int argc, char *argv[])
    timer_solve.Stop(); // Solve timer stop
    U_gf.SetFromTrueVector();
 
+   Vector loc_w(U_gf.GetTrueVector().Size()/3);
+   for (int i = 0; i < loc_w.Size(); i++)
+   {
+      loc_w[i] = U_gf.GetTrueVector()[2*loc_w.Size() + i]; // ordering is byNODES
+   }
+   double max_def = ParNormlp(loc_w, infinity(), MPI_COMM_WORLD);
+   
+   if (rank == 0)
+   {
+      cout << endl << "Max Deformation: " << max_def << endl;
+   }
+
    // Write the output
    timer_output.Start(); // Output timer start
-   ParaViewDataCollection pvdc("LinearElasticity", &pmesh);
+   ParaViewDataCollection pvdc(ctx.output_name + "_RS" + std::to_string(ctx.rs), &pmesh);
    pvdc.SetHighOrderOutput(true);
    pvdc.RegisterField("Displacement", &U_gf);
    pvdc.Save();
