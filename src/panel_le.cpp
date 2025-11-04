@@ -13,7 +13,7 @@ struct LE_Context
 {
    double Lx = 101.06e-3; // mm
    double Ly = 76.2e-3; // mm
-   double t  = 0.127e-3; // mm
+   double t  = 0.5e-3; // mm
 
    int Nx  = 10;
    int Ny  = 10;
