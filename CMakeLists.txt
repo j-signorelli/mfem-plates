@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 
 # Define project
-project(ae298 VERSION 1.0 LANGUAGES CXX)
+project(mfem-plates VERSION 1.0 LANGUAGES CXX)
 
 # Get MFEM
 find_package(MFEM 4.7 REQUIRED CONFIG)
